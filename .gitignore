@@ -1,0 +1,46 @@
+# ============================================================
+# .gitignore — project_inflation_analysis
+# ============================================================
+
+# --- Sensitive ---
+.env
+*.key
+
+# --- Data (never commit raw/processed data) ---
+data/raw/
+data/processed/
+*.csv
+*.parquet
+*.xlsx
+
+# --- Models ---
+models/saved_models/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# --- Jupyter ---
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# --- Virtual environments ---
+venv/
+env/
+.venv/
+.env/
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
