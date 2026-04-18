@@ -475,16 +475,248 @@ A brittle parser would require manual intervention any time stat.go.jp adjusts i
 
 ---
 
-## Phase 2 Decisions
+## Phase 2 Cleaning Decisions
 
-*(To be added during Phase 2 — anticipated topics: D-007 structural-gap policy [resolved early above], D-018 GDP frequency harmonisation, D-019 common-period alignment strategy)*
+*These decisions concern the transformation of the 25 Phase 1 v2 raw series into analysis-ready processed datasets. They are implemented as pure functions in `src/preprocessing.py` and narrated in `notebooks/02_cleaning_alignment.ipynb`.*
+
+---
+
+### D-018 | GDP Quarterly → Monthly Linear Interpolation
+
+**Date:** Phase 2
+**Decision:** Convert quarterly GDP levels to monthly via linear interpolation on the level, then compute YoY % growth on the interpolated monthly level:
+
+```
+monthly_level[t] = level[q_prev] + (t - t_{q_prev})/(t_q - t_{q_prev}) * (level[q] - level[q_prev])
+YoY[t] = (monthly_level[t] / monthly_level[t-12] - 1) * 100
+```
+
+**Method alternatives considered:**
+
+| Option | Summary | Verdict |
+|---|---|---|
+| Forward fill | Step-function (quarterly value held constant for 3 months) | Rejected — violates VAR innovation-i.i.d. assumptions |
+| **Linear interpolation** | Smooth within-quarter variation | **Adopted** — matches ProjectScope §9 specification |
+| Cubic spline | Third-order continuity | Rejected — introduces spurious oscillation |
+| Chow-Lin / Fernandez temporal disaggregation | Regression-based using a high-frequency auxiliary | Considered and rejected after due diligence (see below) |
+
+**Chow-Lin due diligence (rejection rationale):**
+A systematic scout was conducted for a monthly auxiliary (Industrial Production) usable in Chow-Lin disaggregation. OECD MEI industrial-production series for Japan, UK, and Germany all terminate at 2024-03 due to a systemic publication lag. An expanded scout across 45 alternative FRED candidates (non-OECD-MEI) found only OECD Business Tendency confidence indices as FRESH — these are theoretically weaker Chow-Lin auxiliaries (lead rather than contemporaneous with GDP). The UK ONS K222 Index of Production was successfully fetched via native API; Japan (METI) and Germany (Destatis) would require manual native download. At this juncture cost–value analysis concluded that the marginal VAR-accuracy gain from Chow-Lin relative to linear interpolation is disproportionate to the integration complexity: GDP enters the VAR as one of five regressors under lag depths t-1 to t-3, for which linear-interpolation error is absorbed by the regression.
+
+**Retained artefacts (audit trail):**
+- `data/documentation/phase2_ip_scout.csv` — initial OECD IP scout (16 candidates)
+- `data/documentation/phase2_ip_scout_tier1_expanded.csv` — expanded non-OECD scout (45 candidates)
+- `data/raw/UK_IP.csv` — UK ONS Index of Production (retained for potential Phase 5 EDA overlays)
+
+**Implementation:** `gdp_quarterly_to_monthly_yoy()` in `src/preprocessing.py`.
+
+**Portfolio value:** The Chow-Lin option is documented, not silently discarded. A reviewer can verify that an advanced alternative was genuinely evaluated and the simpler method chosen on proportionality grounds. This is the difference between "we used linear interpolation" and "we knowingly used linear interpolation because it was proportionate to the downstream use".
+
+---
+
+### D-019 | Country-Wise Effective Window (Option b)
+
+**Date:** Phase 2
+**Decision:** Each country's processed dataset is trimmed to [2001-01, t_max(c)] where t_max(c) is the last month at which all five indicators for country c are non-NaN.
+
+**Option compared:**
+
+| Option | Strategy | Verdict |
+|---|---|---|
+| (a) Intersection | Trim all countries to max(start)–min(end); one shared window | Rejected — discards ~7 months of USA/JAPAN data to accommodate UK/Germany CPI's earlier end |
+| **(b) Country-wise** | Each country keeps its own full effective window | **Adopted** — preserves information; per-country VAR design does not require shared sample |
+
+**Rationale:**
+`ProjectScope_v1.md` §9 Phase 6 specifies per-country VAR estimation. There is no structural requirement for a shared sample across countries. Option (b) preserves information; the Phase 5 EDA can concat on a common index when cross-country overlay is required.
+
+**Resulting effective windows:**
+
+| Country | Start | End | Binding variable |
+|---|---|---|---|
+| USA | 2001-01 | 2025-10 | GDP (quarterly, last observation Q3 2025) |
+| JAPAN | 2001-01 | 2025-10 | GDP (quarterly) |
+| UK | 2001-01 | 2025-03 | CPI (OECD publication WARNING ~13mo) |
+| GERMANY | 2001-01 | 2025-03 | CPI (OECD publication WARNING ~13mo) |
+
+The 2001-01 start reflects the 12-month YoY lookback window loss inherent to D-012-amended M2 and D-018 GDP transformations.
+
+**Implementation:** `trim_effective_window()` in `src/preprocessing.py`.
+
+---
+
+### D-021 | Germany M2 — Euro-Area Broad Money as Proxy
+
+**Date:** Phase 2
+**Decision:** Replace the Phase 1 v2 placeholder `M2SL` (inherited from USA) with `MABMM301EZM657S` (OECD harmonised Euro-area broad money, YoY %).
+
+**Empirical evidence from Phase 2 scout:**
+
+| Candidate | Scope | Status |
+|---|---|---|
+| `MYAGM2DEM189S` | Germany-specific legacy | Terminated **1998-12** (euro adoption) |
+| `MABMM301DEM189S`, `MABMM301DEM657S` | Germany-specific OECD | Do not exist on FRED |
+| `MANMM101DEM189S`, `MANMM101DEM657S` | Germany-specific (narrow money) | Do not exist on FRED |
+| `MABMM301EZM189S` | Euro-area OECD (level) | CRITICAL (ends 2023-11) |
+| **`MABMM301EZM657S`** | **Euro-area OECD (YoY growth)** | **FRESH, ends 2025-12** — adopted |
+| `MANMM101EZM189S` | Euro-area narrow money | CRITICAL |
+
+**Rationale:**
+The empirical termination of every Germany-specific M2 series at precisely 1998-12 is the signature of a deep institutional fact: following 1999 euro adoption, Germany no longer maintains a national monetary aggregate. The European Central Bank manages broad money at the currency-union level. The theoretically coherent substitute for a (non-existent) national German M2 is the Euro-area aggregate — the monetary quantity to which Germany is actually exposed.
+
+**Limitation (documented):** The monetary variable's level of aggregation differs from the national scope of Germany's other four indicators. VAR coefficients on Germany's M2 therefore reflect Euro-area monetary transmission, attenuated by Germany's share of the currency union. This is institutionally correct but must be remembered when interpreting cross-country M2 comparisons.
+
+**Implementation:**
+- Fetched directly via `notebooks/01_data_collection.ipynb` §8.5
+- Saved to `data/raw/GERMANY_M2.csv` (overwriting v1 placeholder, which is archived to `data/raw/_archive_d021/{timestamp}/`)
+
+**Audit trail:** `data/documentation/phase2_germany_m2_scout.csv` records all 10 candidate outcomes.
+
+---
+
+### D-012 (Amendment) | M2 YoY Conversion — MoM Source Unit Corrected
+
+**Date:** Phase 2 (amends the Phase 1 v2 D-012)
+
+**Original D-012 assumption:** `MABMM301...657S` series from FRED represent year-over-year % growth. Under this assumption, Japan/UK/Germany M2 required no transformation in Phase 2 and only USA (level) needed conversion.
+
+**Empirical audit (Phase 2):** The assumption was falsified. Descriptive statistics of the raw `MABMM301...657S` series revealed a distinctive signature incompatible with YoY growth:
+
+| Country | max | std | Signature |
+|---|---|---|---|
+| JAPAN `MABMM301JPM657S` | 1.76 % | 0.18 % | MoM (YoY would peak ~10 % during COVID) |
+| UK `MABMM301GBM657S` | 4.58 % | 0.74 % | MoM |
+| GERMANY `MABMM301EZM657S` | 2.00 % | 0.42 % | MoM |
+
+**Cross-validation:** A 12-month rolling sum of each series produced peak dates that aligned with known monetary-policy episodes (UK 2008-12 BoE post-Lehman liquidity; Japan 2021-02 BoJ COVID expansion; Euro-area 2007-11 pre-GFC credit boom). This convergence with economic history confirmed MoM identification.
+
+**Amended conversion method:**
+
+```
+For level source (USA, CHINA):
+    YoY[t] = (level[t] / level[t-12] - 1) * 100
+
+For MoM % source (JAPAN, UK, GERMANY):
+    YoY[t] = ( prod_{i=0..11}(1 + MoM[t-i]/100) - 1 ) * 100
+
+The MoM-to-YoY conversion is implemented via log-sum for numerical stability:
+    YoY[t] = ( exp( sum_{i=0..11} ln(1 + MoM[t-i]/100) ) - 1 ) * 100
+```
+
+**Economic-history validation (post-conversion):** Computed peak dates align with the informally known monetary-policy history of each jurisdiction — USA 2021-02 (+26.78 %), Japan 2021-02 (+8.08 %), UK 2008-12 (+17.66 %), Germany 2007-11 (+12.48 %). This validation was the decisive empirical confirmation of the amendment.
+
+**Implementation:** `m2_to_yoy()` in `src/preprocessing.py`, with the `M2_UNITS` dict encoding each country's source-unit classification.
+
+**Audit trail:** `data/documentation/phase2_m2_yoy_validation.csv` records the pre-/post-conversion distributions and peak dates.
+
+**Portfolio value:** A silent assumption (that `...657S` = YoY) would have produced a miscalibrated VAR: the Japan/UK/Germany M2 coefficients would be 12x smaller in magnitude than USA's, creating a spurious "Japan monetary transmission is weak" conclusion. The empirical audit caught this before any VAR estimation. This is a representative example of why data-quality auditing must precede modelling.
+
+---
+
+### D-022 | Residual NaN — Single-Month Linear Interpolation
+
+**Date:** Phase 2
+**Decision:** Internal NaN runs of length exactly 1 month are linearly interpolated. Trailing NaN (the most recent month yet unpublished) is handled downstream by the D-019 effective-window trim.
+
+**Finding:** Across all 25 Phase 1 v2 series, internal NaN gaps exist only in three locations, all of length 1 month:
+
+| Country | Indicator | Gap location |
+|---|---|---|
+| USA | CPI | 2026-03 (may resolve after FRED refresh) |
+| USA | UNEMPLOYMENT | 2026-03 (same) |
+| CHINA | POLICY_RATE | Mid-period (supplementary) |
+
+China unemployment, being annual, has 11-month gaps between observations; these are handled separately via forward-fill within the supplementary pipeline (per D-010).
+
+**Rationale:**
+The Phase 1 v2 diagnostic (D-009) established that no internal NaN run exceeds three months. Consistent with that finding, D-022 applies the least invasive treatment: linear interpolation for single-month gaps only. This is standard practice for macroeconomic monthly data.
+
+**Implementation:** `interpolate_single_gaps(max_gap=1)` in `src/preprocessing.py`.
+
+---
+
+### D-023 | Processed Output Format — Wide CSV per Country
+
+**Date:** Phase 2
+**Decision:** One wide-format CSV per country, with the main / supplementary split reflecting D-001.
+
+**File layout:**
+
+```
+data/processed/
+├── main_usa.csv                  # 298 rows × 5 cols, 2001-01 to 2025-10
+├── main_japan.csv                # 298 rows × 5 cols, 2001-01 to 2025-10
+├── main_uk.csv                   # 291 rows × 5 cols, 2001-01 to 2025-03
+├── main_germany.csv              # 291 rows × 5 cols, 2001-01 to 2025-03
+├── supplementary_china.csv       # 300 rows × 5 cols (sparse, VAR-excluded)
+└── schema.md                     # auto-generated schema specification
+```
+
+**Per-file schema:**
+
+| Column | Type | Description |
+|---|---|---|
+| `date` | DatetimeIndex (MS freq) | First-of-month monthly index |
+| `{COUNTRY}_CPI` | float | Consumer Price Index (base year varies; normalised in EDA) |
+| `{COUNTRY}_POLICY_RATE` | float | Central-bank policy rate, % |
+| `{COUNTRY}_UNEMPLOYMENT` | float | Harmonised unemployment rate, % |
+| `{COUNTRY}_GDP` | float | GDP YoY % growth (from linearly-interpolated monthly level, D-018) |
+| `{COUNTRY}_M2` | float | M2 YoY % growth (D-012 amended) |
+
+**Alternatives considered:**
+
+| Option | Verdict |
+|---|---|
+| Single long-format CSV (all countries) | Rejected — requires pivot before every VAR fit; less Git-friendly |
+| Single wide-format CSV (all 25 cols) | Rejected — mixes main and supplementary, violates D-001 structural separation |
+| Parquet / Pickle | Rejected — Portfolio-unfriendly (binary, not Git-diffable, not reviewable) |
+
+**Rationale for adopted format:**
+- VAR ingestion is `pd.read_csv('data/processed/main_usa.csv').set_index('date')` — one line
+- `load_processed_main(country)` and `load_processed_all_main()` helpers in `src/data_loader.py`
+- Main/supplementary split is structural (not a column flag) — cannot be accidentally violated
+- Column names follow D-011 filename-to-column convention
+
+**Implementation:** Orchestration via `scripts/rebuild_processed.py` (canonical entry point) and `notebooks/02_cleaning_alignment.ipynb` (narrated version).
+
+---
+
+## Phase 2 Final State — Summary
+
+**After Phase 2 cleaning & alignment (4 main + 1 supplementary datasets):**
+
+| Metric | Phase 1 v2 | Phase 2 |
+|---|---|---|
+| Germany M2 placeholder | `M2SL` (USA) | **`MABMM301EZM657S` (Euro area)** — D-021 resolved |
+| M2 unit heterogeneity | Mixed level/MoM | **All YoY % growth** — D-012 amended |
+| GDP frequency | Quarterly | **Monthly (linear interp)** — D-018 |
+| Effective windows | Per-indicator | **Per-country (D-019 option b)** |
+| NaN in main 4 | ≤ 3 singletons | **0** — D-022 applied |
+| Output format | — | **`main_{country}.csv` × 4 + `supplementary_china.csv`** — D-023 |
+| VAR readiness | ❌ (heterogeneous) | ✅ **Ready (NaN-free, harmonised, common schema)** |
+
+**Reusable module architecture introduced:**
+- `src/__init__.py` — package v0.2.0
+- `src/data_loader.py` — I/O helpers (`load_raw_series`, `load_all_raw`, `load_processed_main`, `load_processed_all_main`, `load_processed_china`)
+- `src/preprocessing.py` — Phase 2 transformation functions (`m2_to_yoy`, `gdp_quarterly_to_monthly_yoy`, `interpolate_single_gaps`, `trim_effective_window`, `build_processed`, `build_all_processed`)
+- `scripts/rebuild_processed.py` — canonical CLI orchestrator
+
+All Phase 3 through Phase 7 notebooks will import from `src/` rather than duplicating logic, per `ProjectScope_v1.md` §12.
+
+**Artifacts produced:**
+- `data/processed/main_usa.csv`, `main_japan.csv`, `main_uk.csv`, `main_germany.csv` (4 main-country datasets, NaN-free, 2001-01 onwards)
+- `data/processed/supplementary_china.csv`
+- `data/processed/schema.md` (auto-generated schema specification)
+- `data/documentation/phase2_cleaning_log.csv` (run-by-run audit)
+- `data/documentation/phase2_germany_m2_scout.csv`, `phase2_m2_yoy_validation.csv`, `phase2_ip_scout*.csv`, `phase2_ip_native_fetch_log.csv` (Phase 2 diagnostic / audit artefacts)
+- `notebooks/02_cleaning_alignment.ipynb` — Portfolio-grade narrative of the six Phase 2 decisions
+- `outputs/figures/phase2_m2_yoy_4countries.png`, `phase2_gdp_interpolation_usa.png`, `phase2_processed_4countries_panel.png`
 
 ---
 
 ## Phase 3 Decisions
 
-*(To be added during Phase 3 — anticipated: stationarity transformation per variable, structural-break test specifications)*
+*(To be added during Phase 3 — anticipated topics: per-variable ADF test results, first-differencing decisions, Chow test specifications at 2008-09 / 2020-03 / 2022-02 break points, structural-break treatment via regime dummies vs split samples.)*
 
 ---
 
-*Last updated: Phase 1 v2 complete — 25/25 series, all narratives ready, audit trail intact*
+*Last updated: Phase 2 complete — 4 main + 1 supplementary datasets in `data/processed/`, VAR-ready, reusable `src/` module architecture established.*

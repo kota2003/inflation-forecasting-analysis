@@ -1,153 +1,44 @@
 # Inflation Prediction and Economic Signal Analysis
 
-A multi-country time-series study of inflation dynamics across five economies (USA, Japan, UK, Germany, and China), combining classical econometric methods with modern data-engineering practice.
-
-**Status:** Phase 1 complete (data collection & quality assurance with multi-source rebuild) · Phase 2 in progress (cleaning & alignment)
+A Multi-Country Time-Series Study of Central-Bank Policy, Unemployment, and Money Supply as Drivers of Inflation
 
 ---
 
-## Why This Project
+## Overview
 
-Inflation is one of the most consequential macroeconomic indicators, yet remains notoriously hard to predict. The dynamics differ sharply across countries — the same model cannot explain both USA's 2022 surge and Japan's thirty-year deflation.
+This project builds multi-country vector autoregression (VAR) models to decompose inflation dynamics into their contributing channels — central-bank policy rates, unemployment, real activity, and money supply — for four advanced economies with structurally distinct inflation histories: **USA, Japan, UK, and Germany**. China is included as a supplementary descriptive comparison with explicit reliability caveats.
 
-This project is intentionally positioned at the intersection of:
+Three narrative questions drive the analysis:
 
-- **Statistical rigour** — proper time-series handling, structural break testing, stationarity treatment
-- **Economic interpretability** — three named narratives, policy lag quantification, cross-country contrast
-- **Data engineering maturity** — multi-source architecture, automated diagnostic, resilient API layer
+- **N1 — The Phillips Curve in Practice.** Did the post-GFC decade genuinely break the inflation–unemployment relationship, and did the 2022 shock restore it?
+- **N2 — Monetary Policy Lag.** How many months after a central bank tightens does inflation actually respond? Do impulse response functions match the "6-to-18 months" textbook claim?
+- **N3 — Japan's Uniqueness.** Why did 30 years of low-zero inflation end abruptly in 2022? Is the mechanism pass-through from global commodity prices, or a domestic structural break?
 
----
-
-## Three Named Economic Narratives
-
-The project is organised around three testable narratives, each corresponding to a school of macroeconomic thought:
-
-### Narrative 1 — The Phillips Curve
-> *Does lower unemployment still predict higher inflation?*
-
-Classical relationship (Phillips 1958; Samuelson & Solow 1960). Tested across all four main countries, with explicit examination of whether the relationship broke down post-2008 (the "flattening" debate).
-
-### Narrative 2 — Monetary Policy Lag Effects
-> *How many months after a rate hike does inflation actually respond?*
-
-Taylor rule operationalisation (Taylor 1993). Quantified via VAR Impulse Response Functions per country. Comparative: does the Fed's rate hike affect inflation faster than the BOJ's?
-
-### Narrative 3 — Japan's Uniqueness
-> *Why 30 years of deflation — and why did the pattern reverse in 2022?*
-
-Japan is the only developed economy with sustained deflation (1990s–2010s). The 2022 inflation was structurally different from the West — yen depreciation plus energy-cost pass-through rather than demand-pull. This narrative alone differentiates the project for Japan-focused employers.
+The analysis combines classical econometrics (ARIMA baselines, VAR core, Granger causality, impulse response functions, forecast error variance decomposition) with a regularised machine-learning comparator (Ridge regression on engineered lag features). Every design decision is recorded in [`ProjectDriven.md`](ProjectDriven.md); the full analytical scope is in [`ProjectScope_v1.md`](ProjectScope_v1.md).
 
 ---
 
-## Data
+## Why Portfolio Project 3 Takes This Angle
 
-### Countries and Indicators
+This is the third project in a seven-project data-science portfolio targeting Japanese technology-consulting roles. P1 demonstrated machine-learning engineering on structured customer data; P2 covered feature engineering and classification with interpretability tools; this P3 demonstrates **classical econometric rigour combined with modern data engineering**. The project deliberately prioritises decision documentation, source auditing, and reproducibility over algorithmic novelty — the skills most valued in consulting contexts where analytical defensibility matters more than headline accuracy.
 
-Five economies × five indicators = 25 monthly/quarterly time series from 2000-01 to present.
+---
 
-| Country | Role | CPI | Policy Rate | Unemployment | GDP | M2 |
-|---|---|:-:|:-:|:-:|:-:|:-:|
-| 🇺🇸 USA | Main (benchmark) | ✓ | ✓ | ✓ | ✓ | ✓ |
-| 🇯🇵 Japan | Main (structural contrast) | ✓ | ✓ | ✓ | ✓ | ✓ |
-| 🇬🇧 UK | Main (post-Brexit) | ✓ | ✓ | ✓ | ✓ | ✓ |
-| 🇩🇪 Germany | Main (Euro-area proxy) | ✓ | ✓ | ✓ | ✓ | ✓ |
-| 🇨🇳 China | Supplementary | ✓ | ✓ | ✓ (annual) | ✓ | ✓ |
+## Project Status
 
-China is **excluded from the main VAR models** due to documented reliability concerns (see `ProjectDriven.md` D-001) and included only as supplementary descriptive comparison.
-
-### Multi-Source Architecture
-
-Phase 1 v1 retrieved all 25 series via the FRED API. A Phase 2 diagnostic subsequently identified six series as critically stale (>24 months outdated). The Phase 1 v2 rebuild adopted a three-tier source hierarchy:
-
-```
-Tier 1 — FRED API (19 series)
-            ↓ (if FRED stale or missing)
-Tier 2 — FRED alternative Series IDs (4 series, scout-tested)
-            ↓ (if no FRED alternative fresh enough)
-Tier 3 — Direct from primary statistical agency
-            (Japan Statistics Bureau for Japan CPI: 1 series)
-```
-
-Special handling: China unemployment retrieved from the World Bank API (annual only, supplementary per D-001).
-
-### Final Data Quality (post Phase 1 v2)
-
-| Freshness | Count | Detail |
+| Phase | Focus | Status |
 |---|---|---|
-| 🟢 FRESH (<6 months) | 15 | |
-| 🟡 WARNING (6–24 months) | 8 | Normal publication cadence |
-| 🔴 CRITICAL (>24 months) | 2 | Both China (Supplementary accepted) |
-| ⚫ MISSING | 0 | |
+| Phase 0 | Project scoping, country selection, narrative definition | ✅ Complete |
+| Phase 1 | Data collection — 25 series, 5 countries × 5 indicators, multi-source rebuild | ✅ Complete |
+| Phase 2 | Data cleaning, unit harmonisation, temporal alignment | ✅ Complete |
+| Phase 3 | Stationarity testing (ADF), structural-break testing (Chow) | ⏳ Next |
+| Phase 4 | Feature engineering (lags, rolling statistics, regime dummies) | Pending |
+| Phase 5 | Exploratory data analysis & cross-country narrative visualisation | Pending |
+| Phase 6 | Model estimation — ARIMA, VAR, Ridge | Pending |
+| Phase 7 | Evaluation — Diebold-Mariano, walk-forward validation | Pending |
+| Phase 8 | Interpretation — Granger maps, IRF plots, narrative synthesis | Pending |
 
-**All three narratives confirmed viable** (N1 / N2 / N3: ✅ Ready).
-
-See `ProjectDriven.md` D-006 through D-017 for the complete diagnostic, decision, and remediation record.
-
----
-
-## Methodology
-
-A three-layer modelling progression designed to showcase both econometric depth and ML literacy:
-
-### Layer 1 — ARIMA / SARIMA (Baseline)
-Univariate inflation forecast per country. Establishes time-series fundamentals (ACF/PACF, stationarity, order selection) and sets an accuracy benchmark.
-
-### Layer 2 — VAR (Core Model)
-Multivariate: CPI × Policy Rate × Unemployment × GDP × M2. Enables Granger causality testing, Impulse Response Functions, and Forecast Error Variance Decomposition. **This is the primary analytical contribution.**
-
-### Layer 3 — Ridge Regression with Lag Features (ML Comparison)
-Structured feature matrix with engineered lags. Regularisation for multicollinearity. Feature-importance mapping back to economic interpretation.
-
-### Evaluation
-Time-based split (train 2000–2019, test 2020–present). RMSE / MAE primary, AIC/BIC for model selection, Diebold-Mariano test for pairwise model comparison.
-
-See `docs/ProjectScope_v1.md` for the full methodology specification.
-
----
-
-## Reproducing the Pipeline
-
-### Prerequisites
-
-| # | Requirement | How |
-|---|---|---|
-| 1 | Python ≥ 3.10 | Use conda or venv |
-| 2 | Dependencies | `pip install -r requirements.txt` |
-| 3 | FRED API key | Free at https://fred.stlouisfed.org/docs/api/api_key.html → add `FRED_API_KEY=xxx` to `.env` |
-| 4 | Japan CPI CSV | Download `zmi2020s.csv` from [stat.go.jp](https://www.stat.go.jp/data/cpi/) (長期時系列データ → 中分類指数 2020基準 全国 月次) → place at `data/raw/_manual/zmi2020s.csv` |
-
-### Run
-
-```bash
-# 1. Environment check (verifies Python version, library versions, API connectivity)
-jupyter notebook notebooks/00_environment_test.ipynb
-
-# 2. Full data collection pipeline (runs automatically once zmi2020s.csv is in place)
-jupyter notebook notebooks/01_data_collection.ipynb
-# → fetches all 25 series from FRED + World Bank, runs diagnostic,
-#   executes v2 rebuild (FRED replacements + manual Japan CPI import),
-#   generates visualisations, writes audit log
-#   Total runtime: ~30-60 seconds
-```
-
-The notebook handles transient API failures automatically via retry logic with exponential backoff (see D-017). Only the `zmi2020s.csv` step requires human action — structural features of Japan's government statistics pipeline make this unavoidable (documented in D-016).
-
-### Outputs
-
-```
-data/
-├── raw/                              # 25 series, final v2 state
-├── raw/_archive_v1/{timestamp}/      # Archived v1 versions
-├── raw/_manual/                      # User-placed external files
-├── processed/                        # Phase 2 output (forthcoming)
-└── documentation/
-    └── phase1v2_rebuild_log.csv      # Complete audit trail
-
-outputs/figures/
-├── data_collection_staleness_bar.png
-├── data_collection_cpi_comparison.png
-└── data_collection_jpn_cpi_v1_vs_v2.png
-```
+As of this writing, the `data/processed/` directory contains four fully-observed main-country datasets (USA, Japan, UK, Germany — NaN-free, 2001-01 onwards) and one supplementary dataset (China, sparse by design). All are VAR-ingestion-ready via `src.data_loader.load_processed_main()`.
 
 ---
 
@@ -155,48 +46,157 @@ outputs/figures/
 
 ```
 inflation-forecasting-analysis/
-├── README.md                         ← This file
-├── ProjectDriven.md                  ← Living decision log (D-001 through D-017)
-├── requirements.txt
-├── .env                              ← FRED_API_KEY (gitignored)
-│
-├── docs/
-│   └── ProjectScope_v1.md            ← Full methodology specification
-│
-├── notebooks/
-│   ├── 00_environment_test.ipynb
-│   ├── 01_data_collection.ipynb      ← Full pipeline (Phase 1 complete)
-│   ├── 02_cleaning_alignment.ipynb   ← Phase 2 (in progress)
-│   ├── 03_stationarity_structural_breaks.ipynb
-│   ├── 04_feature_engineering.ipynb
-│   ├── 05_eda.ipynb
-│   ├── 06_arima_baseline.ipynb
-│   ├── 07_var_model.ipynb
-│   ├── 08_ridge_regression.ipynb
-│   └── 09_evaluation_interpretation.ipynb
-│
 ├── data/
-│   ├── raw/                          ← .gitignored
-│   ├── processed/                    ← .gitignored
-│   └── documentation/
-│
-└── outputs/
-    ├── figures/
-    └── forecasts/
+│   ├── raw/                              # 25 source series (final Phase 1 v2 + D-021 state)
+│   │   ├── {COUNTRY}_{INDICATOR}.csv    # 5 × 5 grid of country × indicator
+│   │   ├── _archive_v1/{timestamp}/     # Phase 1 v1 state archived pre-rebuild
+│   │   ├── _archive_d021/{timestamp}/   # Germany M2 placeholder archived pre-resolution
+│   │   ├── _manual/                     # Manual government CSVs (Japan CPI)
+│   │   └── UK_IP.csv                    # Retained from Chow-Lin due diligence
+│   ├── processed/                        # Phase 2 output — VAR-ready datasets
+│   │   ├── main_usa.csv                 # 298 rows × 5 cols, 2001-01 to 2025-10
+│   │   ├── main_japan.csv               # 298 rows × 5 cols, 2001-01 to 2025-10
+│   │   ├── main_uk.csv                  # 291 rows × 5 cols, 2001-01 to 2025-03
+│   │   ├── main_germany.csv             # 291 rows × 5 cols, 2001-01 to 2025-03
+│   │   ├── supplementary_china.csv      # 300 rows × 5 cols, VAR-excluded
+│   │   └── schema.md                    # Auto-generated schema specification
+│   └── documentation/                    # Audit logs from every pipeline stage
+│       ├── phase1v2_rebuild_log.csv
+│       ├── phase2_cleaning_log.csv
+│       ├── phase2_germany_m2_scout.csv
+│       ├── phase2_m2_yoy_validation.csv
+│       └── phase2_ip_scout*.csv         # Chow-Lin due diligence (rejected)
+├── src/                                  # Reusable Python modules (imported by notebooks)
+│   ├── __init__.py                       # Package v0.2.0
+│   ├── data_loader.py                    # I/O helpers for raw & processed datasets
+│   └── preprocessing.py                  # Phase 2 transformation functions
+├── scripts/
+│   └── rebuild_processed.py              # CLI orchestrator — regenerates data/processed/
+├── notebooks/
+│   ├── 00_environment_test.ipynb         # Environment verification
+│   ├── 01_data_collection.ipynb          # Phase 1 — data collection & quality assurance
+│   └── 02_cleaning_alignment.ipynb       # Phase 2 — cleaning, alignment, harmonisation
+├── outputs/
+│   └── figures/                          # Phase-specific visualisations
+├── .env.example                          # Template for FRED API key
+├── requirements.txt                      # Python dependencies
+├── README.md                             # This file
+├── ProjectScope_v1.md                    # Full analytical scope (§1–§14)
+└── ProjectDriven.md                      # Living decision log (D-001 through D-023)
 ```
+
+---
+
+## How to Reproduce
+
+### Prerequisites
+
+- Python 3.10 or later (developed against 3.10.20)
+- Conda environment recommended; dependencies in `requirements.txt`
+- FRED API key: register at [https://fred.stlouisfed.org/docs/api/api_key.html](https://fred.stlouisfed.org/docs/api/api_key.html) and place in `.env` as `FRED_API_KEY=...`
+
+### Setup
+
+```bash
+git clone <repo-url> inflation-forecasting-analysis
+cd inflation-forecasting-analysis
+
+# Create environment
+conda create -n p3_inflation python=3.10 -y
+conda activate p3_inflation
+pip install -r requirements.txt
+
+# Configure FRED credentials
+cp .env.example .env
+# Edit .env and paste your FRED_API_KEY
+```
+
+### Regenerate `data/raw/`
+
+The Phase 1 collection is fully automated. Run end-to-end via the notebook:
+
+```bash
+jupyter lab notebooks/01_data_collection.ipynb
+# Run All → takes approximately 2–3 minutes (FRED API + one D-021 Euro-area M2 fetch)
+```
+
+The notebook archives any prior `data/raw/` contents, performs the Phase 1 v2 rebuild, executes the D-021 Germany M2 resolution (§8.5), and re-runs the freshness diagnostic. One manual step remains: downloading `zmi2020s.csv` from Japan's Statistics Bureau ([https://www.stat.go.jp/data/cpi/](https://www.stat.go.jp/data/cpi/)) into `data/raw/_manual/` per D-016. The notebook displays clear instructions when this file is missing.
+
+### Regenerate `data/processed/`
+
+Two equivalent paths are available:
+
+**Path A — CLI (fastest, non-interactive):**
+```bash
+python scripts/rebuild_processed.py
+# ~15 seconds; reads data/raw/*.csv, writes 5 CSVs + audit log
+```
+
+**Path B — Notebook (narrated, portfolio-readable):**
+```bash
+jupyter lab notebooks/02_cleaning_alignment.ipynb
+# Run All → ~30 seconds; same transformations, plus mathematical commentary,
+# economic-history validation tables, and 3 portfolio-grade figures
+```
+
+Both paths import from `src/preprocessing.py` — the single source of truth for all transformation logic.
+
+### Regenerate audit/documentation CSVs
+
+If `data/documentation/` is missing Phase 2 audit CSVs (e.g., after a fresh clone or cleanup), regenerate them via:
+
+```bash
+python scripts/regenerate_phase2_audits.py
+```
+
+This rebuilds (a) `phase2_m2_yoy_validation.csv` — M2 YoY transformation validation with economic-history peak-date checks, (b) `phase2_cleaning_log.csv` — per-file audit of the processed/ outputs, and (c) `phase2_germany_m2_scout.csv` — D-021 scout log (requires `FRED_API_KEY` in `.env`; skipped gracefully otherwise).
+
+---
+
+## Data Sources
+
+| Source | Role | Series used |
+|---|---|---|
+| [FRED](https://fred.stlouisfed.org/) (Federal Reserve Bank of St. Louis) | Primary — 23 of 25 series | CPI, policy rates, unemployment, GDP, M2 across USA/JPN/UK/GER/CHN |
+| [Statistics Bureau of Japan](https://www.stat.go.jp/data/cpi/) (総務省統計局) | Phase 1 v2 rebuild | Japan CPI (`zmi2020s.csv`, 2020-base, per D-016) |
+| [World Bank](https://data.worldbank.org/) | Phase 1 | China unemployment (annual, SL.UEM.TOTL.ZS) |
+| [UK ONS](https://www.ons.gov.uk/) | Chow-Lin due diligence (retained, unused) | UK Index of Production K222 |
 
 ---
 
 ## Honest Data Integrity Caveats
 
-Responsible portfolio work documents limitations. This project's residual issues:
+Reviewers and future collaborators should read these before interpreting the results:
 
-1. **UK GDP (WARNING, 6 months outdated)** — Reflects normal ONS quarterly publication cadence, not a pipeline defect
-2. **M2 unit heterogeneity** — USA/Germany in level form, Japan/UK in YoY growth. Harmonised in Phase 2 cleaning (D-012)
-3. **Germany M2 uses USA Series ID as proxy** — Documented placeholder; Germany-specific scout scheduled in Phase 2
-4. **China series (3 CRITICAL including annual unemployment)** — All consistent with supplementary framing per D-001; no impact on main VAR
+1. **Germany M2 is Euro-area-wide, not German national.** Following 1999 euro adoption, Germany does not maintain a national monetary aggregate; D-021 adopts `MABMM301EZM657S` (Euro-area M2) as the institutionally-correct substitute. Cross-country M2 comparisons for Germany must be read as national-vs-currency-union, not national-vs-national.
 
-Full accounting is in `ProjectDriven.md` §Phase 1 Final State.
+2. **UK and Germany CPI end at 2025-03.** OECD harmonised publication for these two lags approximately 13 months. Their effective windows end 2025-03 and their datasets contain 291 rows (vs 298 for USA/JPN). Sufficient for VAR estimation but the latest inflation cycle (Q2-2025 onwards) is out-of-sample for these two.
+
+3. **Monthly GDP is linearly interpolated from quarterly.** D-018 adopts linear interpolation on the quarterly level; within-quarter GDP variation in the processed data is an interpolation artefact, not a measurement. The Chow-Lin due diligence archive (`data/documentation/phase2_ip_scout*.csv`) documents why a more sophisticated method was evaluated and rejected as disproportionate to GDP's role in the VAR (one of 5 regressors under short lags).
+
+4. **M2 YoY was computed from MoM % source for 3 of 4 main countries.** The `MABMM301...657S` FRED series documentation labels them "growth rate same period previous year," but their empirical distributions (max ~2-5 %, std < 1 %) are incompatible with YoY growth. D-012 (amended) corrects this via a cumulative-product conversion from MoM. Post-conversion peak dates align with known monetary-policy episodes across all four countries — the empirical validation is in `notebooks/02_cleaning_alignment.ipynb` §5.5.
+
+5. **China is supplementary only.** China's CPI (WARNING freshness), policy rate (WARNING), M2 (CRITICAL, ends 2018-12), and annual unemployment are incorporated for descriptive cross-country context only. D-001 excludes China from the main VAR due to documented reliability concerns (GDP targets, CPI basket opacity, urban-only unemployment coverage).
+
+6. **Structural breaks at 2008-09, 2020-03, and 2022-02 are untreated in Phase 2.** The VAR coefficients estimated on 2001–2019 training data (per D-005) may not generalise to post-2020 test data without explicit regime-dummy or split-sample treatment. Phase 3 will test for structural breaks at these three candidate dates via Chow tests, and Phase 6 will adjust the VAR specification accordingly.
+
+---
+
+## Portfolio Context
+
+This project is the third in a seven-project data-science portfolio prepared for Japanese technology-consulting and data-platform roles.
+
+| # | Project | Analytical focus | Status |
+|---|---|---|---|
+| P1 | Supermarket Price Analysis and ML Classification (Product Categorization) | Data engineering, cleaning, and baseline ML classification | Complete |
+| P2 | Customer Segmentation and Business Insights (Marketing Analytics) | Feature engineering, segmentation, interpretability | Complete |
+| **P3** | **Inflation Prediction and Economic Signal Analysis** | **Classical econometrics + data engineering** | **In progress — Phase 2 complete** |
+| P4 | Bank Churn Prediction | Imbalanced-class ML, SHAP interpretability | Planned |
+| P5 | Time-Series Sales Forecasting (Retail) | Prophet / LSTM / tree-based forecasting | Planned |
+| P6 | Deep Learning Classification (Image Recognition) | CNN architectures, transfer learning | Planned |
+| P7 | End-to-End ML Pipeline with Deployment | MLOps, cloud deployment, API serving | Planned |
+
+P3 deliberately focuses on econometric methodology and analytical defensibility. P5 will cover applied time-series forecasting from a different angle (demand forecasting with tree-based and deep models); P3's VAR framework is complementary, emphasising causal interpretation over forecast accuracy.
 
 ---
 
@@ -205,24 +205,19 @@ Full accounting is in `ProjectDriven.md` §Phase 1 Final State.
 - **Phillips, A. W.** (1958). *The Relation between Unemployment and the Rate of Change of Money Wage Rates in the United Kingdom, 1861–1957.* Economica.
 - **Friedman, M.** (1956). *The Quantity Theory of Money — A Restatement.* Studies in the Quantity Theory of Money.
 - **Taylor, J. B.** (1993). *Discretion versus Policy Rules in Practice.* Carnegie-Rochester Conference Series on Public Policy.
+- **Sims, C. A.** (1980). *Macroeconomics and Reality.* Econometrica, 48(1), 1–48.
+- **Chow, G. C., & Lin, A. L.** (1971). *Best Linear Unbiased Interpolation, Distribution, and Extrapolation of Time Series by Related Series.* Review of Economics and Statistics, 53(4), 372–375.
+- **Diebold, F. X., & Mariano, R. S.** (1995). *Comparing Predictive Accuracy.* Journal of Business & Economic Statistics, 13(3), 253–263.
 - **Fernald, J. G., Hsu, E., & Spiegel, M. M.** (2021). *Is China fudging its GDP figures? Evidence from trading partner data.* Journal of International Money and Finance.
-- **Federal Reserve Bank of St. Louis** — FRED Economic Data. https://fred.stlouisfed.org/
-- **Statistics Bureau of Japan (総務省統計局)** — Consumer Price Index. https://www.stat.go.jp/data/cpi/
-- **World Bank** — SL.UEM.TOTL.ZS Unemployment Total. https://data.worldbank.org/
 
 ---
 
-## Project Context
+## Author
 
-This is **Project 3** of a broader data-science portfolio designed to demonstrate complementary skills:
+Portfolio author: **Kouta** (Melbourne, Australia). This project documents analytical decisions in English for reviewability by an international audience; commentary on workflow and iteration is maintained separately in Japanese.
 
-| Project | Focus |
-|---|---|
-| P1 | Foundation — SQL, pandas |
-| P2 | Classical ML — feature engineering, model selection |
-| **P3 (this project)** | **Econometrics — time-series, interpretability, multi-source data** |
-| P5 | Data engineering — pipelines, productionisation |
-| P6 | Deep learning — sequential models |
-| P7 | Analytical critique — hypothesis testing, research quality |
+See [`ProjectDriven.md`](ProjectDriven.md) for the complete decision log and [`ProjectScope_v1.md`](ProjectScope_v1.md) for the full analytical scope.
 
-The distinctive contribution of P3 is the combination of **classical econometric rigour** (VAR, Granger, IRF) with **modern data engineering** (multi-source architecture, retry logic, reproducible pipelines). The Phase 1 v2 rebuild — in which a seemingly-complete dataset was audited, found wanting, and strategically remediated — is the clearest showcase of data-literacy depth.
+---
+
+*Last updated: Phase 2 complete — 4 main + 1 supplementary datasets in `data/processed/`, VAR-ready, reusable `src/` module architecture established. Next: Phase 3 stationarity & structural-break testing.*

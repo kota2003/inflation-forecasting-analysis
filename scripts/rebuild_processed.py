@@ -33,7 +33,7 @@ from src.data_loader import (         # noqa: E402
     MAIN_COUNTRIES,
     SUPPLEMENTARY_COUNTRIES,
 )
-from src.preprocessing import build_all_processed   # noqa: E402
+from src.preprocessing import build_all_processed, write_schema_md   # noqa: E402
 
 
 def main() -> int:
@@ -81,6 +81,12 @@ def main() -> int:
         log_df = pd.concat([existing, log_df], ignore_index=True)
     log_df.to_csv(log_path, index=False)
     print(f"\n  audit log   : {log_path.relative_to(root)}")
+
+    # Schema specification (auto-generated documentation of processed/)
+    schema_path = processed_dir / 'schema.md'
+    write_schema_md(datasets, schema_path)
+    print(f"  schema      : {schema_path.relative_to(root)}")
+
     print("\nDone.")
     return 0
 
