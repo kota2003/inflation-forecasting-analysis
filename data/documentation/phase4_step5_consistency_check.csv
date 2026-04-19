@@ -1,0 +1,13 @@
+cols_match,rows_match,n_value_mismatch,max_abs_diff,note,country,step
+True,True,0,8.881784197001252e-16,ok,USA,S2_lag
+True,True,0,3.552713678800501e-15,ok,USA,S3_rolling
+True,True,0,9.540979117872439e-17,ok,USA,S4_regime
+True,True,0,9.990923019453923e-17,ok,JAPAN,S2_lag
+True,True,0,8.881784197001252e-16,ok,JAPAN,S3_rolling
+True,True,0,0.0,ok,JAPAN,S4_regime
+True,True,0,8.881784197001252e-16,ok,UK,S2_lag
+True,True,0,1.7763568394002505e-15,ok,UK,S3_rolling
+True,True,0,0.0,ok,UK,S4_regime
+True,True,0,2.220446049250313e-16,ok,GERMANY,S2_lag
+True,True,0,1.7763568394002505e-15,ok,GERMANY,S3_rolling
+True,True,0,0.0,ok,GERMANY,S4_regime

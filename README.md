@@ -13,14 +13,14 @@ This is **Portfolio Project 3 (P3)** in a three-project series. P1 demonstrated 
 | Phase 0 | Project scoping, country selection, narrative definition | ✅ Complete |
 | Phase 1 | Data collection — 25 series, 5 countries × 5 indicators, multi-source rebuild | ✅ Complete |
 | Phase 2 | Data cleaning, unit harmonisation, temporal alignment | ✅ Complete |
-| Phase 3 | Stationarity testing (ADF+KPSS), structural-break testing (Chow, Quandt-Andrews) | ✅ **Complete** |
-| Phase 4 | Feature engineering (lags, rolling statistics, regime dummies) | ⏳ Next |
-| Phase 5 | Exploratory data analysis & cross-country narrative visualisation | Pending |
+| Phase 3 | Stationarity testing (ADF+KPSS), structural-break testing (Chow, Quandt-Andrews) | ✅ Complete |
+| Phase 4 | Feature engineering (lags, rolling statistics, regime dummies) | ✅ **Complete** |
+| Phase 5 | Exploratory data analysis & cross-country narrative visualisation | ⏳ Next |
 | Phase 6 | Model estimation — ARIMA, VAR, Ridge | Pending |
 | Phase 7 | Evaluation — Diebold-Mariano, walk-forward validation | Pending |
 | Phase 8 | Interpretation — Granger maps, IRF plots, narrative synthesis | Pending |
 
-As of this writing, the `data/processed/` directory contains four fully-observed main-country datasets (USA, Japan, UK, Germany — NaN-free, 2001-01 onwards) and one supplementary dataset (China, sparse by design). All are VAR-ingestion-ready via `src.data_loader.load_processed_main()`. Phase 3 has classified every series' stationarity status, characterised three pre-specified structural breaks (2008-09, 2020-03, 2022-02) via three Chow variants, and independently confirmed the ENERGY_2022 break via Quandt-Andrews sup-Wald scan at two trim fractions.
+As of this writing, the `data/processed/` directory contains four fully-observed main-country datasets (USA, Japan, UK, Germany — NaN-free, 2001-01 onwards) and one supplementary dataset (China, sparse by design). All are VAR-ingestion-ready via `src.data_loader.load_processed_main()`. Phase 3 has classified every series' stationarity status, characterised three pre-specified structural breaks (2008-09, 2020-03, 2022-02) via three Chow variants, and independently confirmed the ENERGY_2022 break via Quandt-Andrews sup-Wald scan at two trim fractions. Phase 4 has built per-country feature matrices of 50–53 columns each — base transforms, lag grid {1, 3, 6, 12}, rolling {mean, std} at windows {3, 12}, and the D-030 regime-dummy structure — and exports them as wide-format `features_{country}.csv` ready for Phase 6 VAR/Ridge ingestion.
 
 ---
 
@@ -35,13 +35,18 @@ inflation-forecasting-analysis/
 │   │   ├── _archive_d021/{timestamp}/   # Germany M2 placeholder archived pre-resolution
 │   │   ├── _manual/                     # Manual government CSVs (Japan CPI)
 │   │   └── UK_IP.csv                    # Retained from Chow-Lin due diligence
-│   ├── processed/                        # Phase 2 output — VAR-ready datasets
+│   ├── processed/                        # Phase 2 + Phase 4 outputs — model-ready datasets
 │   │   ├── main_usa.csv                 # 298 rows × 5 cols, 2001-01 to 2025-10
 │   │   ├── main_japan.csv               # 298 rows × 5 cols, 2001-01 to 2025-10
 │   │   ├── main_uk.csv                  # 291 rows × 5 cols, 2001-01 to 2025-03
 │   │   ├── main_germany.csv             # 291 rows × 5 cols, 2001-01 to 2025-03
 │   │   ├── supplementary_china.csv      # 300 rows × 5 cols, VAR-excluded
-│   │   └── schema.md                    # Auto-generated schema specification
+│   │   ├── schema.md                    # Phase 2 schema specification (auto-generated)
+│   │   ├── features_usa.csv             # Phase 4 feature matrix — 298 × 53
+│   │   ├── features_japan.csv           # Phase 4 feature matrix — 298 × 50
+│   │   ├── features_uk.csv              # Phase 4 feature matrix — 291 × 51
+│   │   ├── features_germany.csv         # Phase 4 feature matrix — 291 × 52
+│   │   └── features_schema.md           # Phase 4 schema specification (auto-generated)
 │   └── documentation/                    # Audit logs from every pipeline stage
 │       ├── phase1v2_rebuild_log.csv
 │       ├── phase2_cleaning_log.csv
@@ -56,29 +61,37 @@ inflation-forecasting-analysis/
 │       ├── phase3_chow_tests_{classical,hac,covid_dummy}.csv
 │       ├── phase3_chow_coefficient_decomposition.csv   # input to D-030
 │       ├── phase3_chow_bonferroni_summary.csv
-│       └── phase3_quandt_andrews_*.csv  # Task 2 sup-Wald scans (π₀ = 0.15 & 0.10)
+│       ├── phase3_quandt_andrews_*.csv  # Task 2 sup-Wald scans (π₀ = 0.15 & 0.10)
+│       ├── phase4_step1_*.csv           # Phase 4 base-registry audit (3 files)
+│       ├── phase4_step2_lag_*.csv       # Lag matrix audit (4 country + summary)
+│       ├── phase4_step3_rolling_*.csv   # Rolling stats audit (4 country + summary)
+│       ├── phase4_step4_regime_*.csv    # Regime dummy audit (4 country + summary + spec)
+│       └── phase4_step5_*.csv           # Assembly + 12/12 module-vs-scratch regression test
 ├── src/                                  # Reusable Python modules (imported by notebooks)
-│   ├── __init__.py                       # Package v0.3.0
+│   ├── __init__.py                       # Package v0.4.0
 │   ├── data_loader.py                    # I/O helpers for raw & processed datasets
 │   ├── preprocessing.py                  # Phase 2 transformation functions
 │   ├── stationarity.py                   # Phase 3 Task 1 — ADF/KPSS, 4-quadrant, transforms
-│   └── structural_breaks.py              # Phase 3 Task 2 — Chow, decomposition, Quandt-Andrews
+│   ├── structural_breaks.py              # Phase 3 Task 2 — Chow, decomposition, Quandt-Andrews
+│   └── feature_engineering.py            # Phase 4 — base registry + lag + rolling + regime dummies
 ├── scripts/
 │   ├── rebuild_processed.py              # CLI orchestrator — regenerates data/processed/
 │   ├── regenerate_phase2_audits.py       # Regenerates Phase 2 audit CSVs
-│   └── phase3_step*.py                   # Phase 3 scratch scripts (S1–S5b, audit trail)
+│   ├── phase3_step*.py                   # Phase 3 scratch scripts (S1–S5b, audit trail)
+│   └── phase4_step*.py                   # Phase 4 scratch scripts (S1–S5, audit trail)
 ├── notebooks/
 │   ├── 00_environment_test.ipynb         # Environment verification
 │   ├── 01_data_collection.ipynb          # Phase 1 — data collection & quality assurance
 │   ├── 02_cleaning_alignment.ipynb       # Phase 2 — cleaning, alignment, harmonisation
-│   └── 03_stationarity_structural_breaks.ipynb  # Phase 3 — stationarity & structural breaks
+│   ├── 03_stationarity_structural_breaks.ipynb  # Phase 3 — stationarity & structural breaks
+│   └── 04_feature_engineering.ipynb      # Phase 4 — lag, rolling, regime dummies
 ├── outputs/
 │   └── figures/                          # Phase-specific visualisations (Phase 2 + Phase 3 panels)
 ├── .env.example                          # Template for FRED API key
 ├── requirements.txt                      # Python dependencies (v1.1, scipy pinned)
 ├── README.md                             # This file
-├── ProjectScope_v1.md                    # Full analytical scope (§1–§14)
-└── ProjectDriven.md                      # Living decision log (D-001 through D-033)
+├── ProjectScope_v1.md                    # Full analytical scope (§1–§19)
+└── ProjectDriven.md                      # Living decision log (D-001 through D-040)
 ```
 
 ---
@@ -149,6 +162,24 @@ python scripts/phase3_step5b_quandt_andrews_trim10.py
 jupyter lab notebooks/03_stationarity_structural_breaks.ipynb
 ```
 
+### Regenerate Phase 4 feature matrices
+
+Phase 4 feature-matrix construction is reproducible via either the notebook or the scratch-script sequence. All logic lives in `src/feature_engineering.py`; the scratch scripts and notebook exercise the same functions from different entry points.
+
+```bash
+# Run scratch scripts in sequence (optional — audit trail)
+python scripts/phase4_step1_base_features.py
+python scripts/phase4_step2_lag_matrix.py
+python scripts/phase4_step3_rolling.py
+python scripts/phase4_step4_regime_dummies.py
+python scripts/phase4_step5_assemble.py   # writes data/processed/features_*.csv
+
+# Or simply run the Portfolio notebook (Run All, ~30 seconds)
+jupyter lab notebooks/04_feature_engineering.ipynb
+```
+
+Step 5 also writes `data/documentation/phase4_step5_consistency_check.csv` — the module-vs-scratch regression test at 1e-10 tolerance.
+
 ---
 
 ## Phase 3 Highlights
@@ -164,6 +195,40 @@ Four interwoven signature findings:
 4. **Data-driven break detection confirms the ex-ante specification.** Quandt-Andrews argmax at π₀ = 0.10 falls within ±1 month of 2022-02 for all four countries. USA sup-W = 37.73 exceeds the Andrews 1% critical value (23.04). The data independently pinpoint the break date that ProjectScope identified from economic reasoning alone — the Phase 3 signature finding.
 
 See `notebooks/03_stationarity_structural_breaks.ipynb` for the full narrative and `ProjectDriven.md` entries D-024 through D-033 for decision rationale.
+
+---
+
+## Phase 4 Highlights
+
+Three features distinguish the Phase 4 build:
+
+1. **D-031 runtime overrides centralised in `src/`.** The Phase 3 Transformation Registry was correct at Step 3 but post-hoc revised by D-031 for JPN/UK/GER CPI. Rather than duplicate the override dict across every Phase 4 caller, it lives as `src.feature_engineering.REGISTRY_OVERRIDES` — applied automatically by `load_effective_registry()`. One source of truth for the 50+ feature columns that depend on it.
+
+2. **D-030 Phase 6 directive implemented as gated interactions.** The dominant-driver matrix from Phase 3's coefficient decomposition becomes `PHASE6_REGIME_SPEC` — a 12-entry dict whose values are either a regressor name, `'const'` (intercept shift, no interaction needed), or `None` (not significant). `build_interactions()` reads this spec and emits exactly 6 interaction columns across the four countries (USA 3 + JPN 0 + UK 1 + GER 2), matching D-030 one-to-one.
+
+3. **Module-vs-scratch regression test at IEEE 754 precision.** Step 5 rebuilds the lag/rolling/regime matrices via the production module and compares them element-wise against the S2/S3/S4 scratch CSVs at 1e-10 tolerance. All 12 checks pass with max_abs_diff ≤ 3.55×10⁻¹⁵ — floating-point rounding only. This is a Portfolio-level correctness proof that the production module reproduces the scratch iterations exactly.
+
+Output matrices per country:
+
+| Country | base | lag | rolling | split | period | interaction | total |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| USA     | 5 | 20 | 20 | 3 | 2 | 3 | **53** |
+| Japan   | 5 | 20 | 20 | 3 | 2 | 0 | **50** |
+| UK      | 5 | 20 | 20 | 3 | 2 | 1 | **51** |
+| Germany | 5 | 20 | 20 | 3 | 2 | 2 | **52** |
+
+Joint-valid windows (all five base series fully observed through all lag and rolling transformations):
+
+| Country | Joint-valid start | Joint-valid end | Observations |
+|---|---|---|---:|
+| USA     | 2003-01 | 2025-10 | 274 |
+| Japan   | 2002-02 | 2025-10 | 285 |
+| UK      | 2002-02 | 2025-03 | 278 |
+| Germany | 2002-02 | 2025-03 | 278 |
+
+USA's joint-valid start lags by eleven months because `USA_CPI` enters the VAR as `yoy_pct` (per the D-027 Registry + D-031 retention), which consumes a full 12-month lookback. The other three countries use `first_diff` or `log_diff_pct` on CPI and therefore lose only one observation.
+
+See `notebooks/04_feature_engineering.ipynb` for the full narrative and `ProjectDriven.md` entries D-034 through D-040 for decision rationale.
 
 ---
 
@@ -189,4 +254,4 @@ See [`ProjectDriven.md`](ProjectDriven.md) for the complete decision log and [`P
 
 ---
 
-*Last updated: Phase 3 complete — four main-country datasets classified, Chow/Quandt-Andrews breaks characterised, reusable `src/` module architecture extended to v0.3.0 with 4 modules and 60 total exports. Next: Phase 4 feature engineering.*
+*Last updated: Phase 4 complete — per-country feature matrices of 50–53 columns built, reusable `src/` module architecture extended to v0.4.0 with 5 modules and 77 total exports. Next: Phase 5 exploratory data analysis.*

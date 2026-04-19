@@ -1,0 +1,5 @@
+country,n_rows,n_columns,joint_valid_start,joint_valid_end,n_joint_valid,n_nan_total
+USA,298,53,2003-01-01,2025-10-01,274,368
+JAPAN,298,50,2002-02-01,2025-10-01,285,276
+UK,291,51,2002-02-01,2025-03-01,278,276
+GERMANY,291,52,2002-02-01,2025-03-01,278,276

@@ -1,0 +1,5 @@
+country,pi0,k_restrictions,sup_w,argmax_date,avg_w,exp_w,andrews_1pct,andrews_5pct,andrews_10pct,verdict_5pct,n_candidates,trim_window_start,trim_window_end,months_to_GFC_2008,aligned_GFC_2008,months_to_COVID_2020,aligned_COVID_2020,months_to_ENERGY_2022,aligned_ENERGY_2022,closest_known,closest_known_date,months_to_closest,aligned_to_any_known
+USA,0.1,5,37.73436681035747,2022-01-01,6.2715578870586315,13.753533337258919,23.04,18.82,16.44,reject @ 1%,229,2004-06-01,2023-06-01,160,False,22,False,1,True,ENERGY_2022,2022-02-01,1,True
+JAPAN,0.1,5,11.884109236693291,2022-01-01,3.7859210822486604,2.6968109691398534,23.04,18.82,16.44,fail to reject,238,2003-08-01,2023-05-01,160,False,22,False,1,True,ENERGY_2022,2022-02-01,1,True
+UK,0.1,5,12.568941366924587,2022-03-01,3.2270254939276986,2.284566403518244,23.04,18.82,16.44,fail to reject,233,2003-07-01,2022-11-01,162,False,24,False,1,True,ENERGY_2022,2022-02-01,1,True
+GERMANY,0.1,5,5.133831496423686,2022-01-01,2.0775797849491107,1.2392182204162627,23.04,18.82,16.44,fail to reject,233,2003-07-01,2022-11-01,160,False,22,False,1,True,ENERGY_2022,2022-02-01,1,True

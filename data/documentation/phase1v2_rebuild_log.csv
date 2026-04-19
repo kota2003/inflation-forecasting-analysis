@@ -1,0 +1,6 @@
+timestamp,country,indicator,old_series_id,new_series_id,new_nature,manual_override,fetch_status,n_obs,effective_end,months_outdated,freshness,rationale,error
+20260417_221405,JAPAN,M2,MYAGM2JPM189S,MABMM301JPM657S,"M3 broad money, YoY % growth",False,OK,311,2025-11,5,FRESH,Only FRED candidate with FRESH status. M3 YoY growth supports monetarist channel.,
+20260417_221405,JAPAN,POLICY_RATE,IRSTCB01JPM156N,IRSTCI01JPM156N,Immediate call money rate (BOJ operational target),True,OK,315,2026-03,1,FRESH,"OVERRIDE: scout picked IRLTLT (10-year JGB yield = market rate with expectations, not policy variable). Replaced with IRSTCI (call money), which is BOJ's actual operational target.",
+20260417_221405,UK,M2,MANMM101GBM189S,MABMM301GBM657S,"M3 broad money, YoY % growth",False,OK,314,2026-02,2,FRESH,Only FRED candidate with FRESH status.,
+20260417_221405,UK,GDP,NAEXKP01GBQ652S,NGDPRSAXDCGBQ,"Real GDP, SA, quarterly",True,OK,104,2025-10,6,WARNING,OVERRIDE: scout picked UKNGDP (nominal GDP). Cross-country consistency requires real GDP. Identical freshness to scout winner.,
+20260417_221405,JAPAN,CPI,JPNCPIALLMINMEI,MANUAL_STATSBUREAU,"CPI index level 2020=100, monthly, from stat.go.jp 中分類指数",True,OK,314,2026-02,2,FRESH,FRED/OECD Japan CPI family all stopped updating at 2021-06; IMF APIs unreachable; manual retrieval from 総務省統計局 long-term time series.,

@@ -1,0 +1,21 @@
+country,indicator,level_classification,level_adf_pvalue,level_kpss_pvalue,recommended_transform,post_transform_classification,justification
+USA,CPI,Non-stationary,0.937651987978216,0.01,yoy_pct,Stationary,CPI YoY stationary; aligns with D-018/D-012 YoY convention across GDP/M2; chosen for cross-indicator consistency and N1 Phillips Curve narrative (inflation as CPI growth).
+USA,POLICY_RATE,Inconclusive,0.07251302907911586,0.1,first_diff,Stationary,Level Inconclusive; first_diff yields Stationary. Standard I(1) treatment.
+USA,UNEMPLOYMENT,Trend-stationary (conflict),0.03941099488396634,0.0305180800513832,first_diff_with_caveat,Error,Neither 'ct' nor first_diff fully resolves; first_diff adopted with caveat.
+USA,GDP,Stationary,0.018122708852663105,0.1,level,Stationary,Level-stationary under joint ADF+KPSS; used directly in Phase 6 VAR.
+USA,M2,Stationary,0.006204334678119258,0.1,level,Stationary,Level-stationary under joint ADF+KPSS; used directly in Phase 6 VAR.
+JAPAN,CPI,Non-stationary,0.9955689638460304,0.01,yoy_pct_with_caveat,Non-stationary,All three CPI transforms remain flagged; adopt YoY for narrative alignment and re-examine in Phase 6 robustness.
+JAPAN,POLICY_RATE,Inconclusive,0.16694883583878967,0.1,first_diff,Stationary,Level Inconclusive; first_diff yields Stationary. Standard I(1) treatment.
+JAPAN,UNEMPLOYMENT,Non-stationary,0.4808219659440571,0.01,first_diff,Stationary,Level Non-stationary; first_diff yields Stationary. Standard I(1) treatment.
+JAPAN,GDP,Stationary,0.0018654879962973422,0.1,level,Stationary,Level-stationary under joint ADF+KPSS; used directly in Phase 6 VAR.
+JAPAN,M2,Non-stationary,0.34218227760928077,0.01,first_diff,Stationary,Level Non-stationary; first_diff yields Stationary. Standard I(1) treatment.
+UK,CPI,Non-stationary,0.9520271561965752,0.01,yoy_pct_with_caveat,Non-stationary,All three CPI transforms remain flagged; adopt YoY for narrative alignment and re-examine in Phase 6 robustness.
+UK,POLICY_RATE,Non-stationary,0.3538158151231091,0.01,first_diff,Stationary,Level Non-stationary; first_diff yields Stationary. Standard I(1) treatment.
+UK,UNEMPLOYMENT,Non-stationary,0.6095986695584094,0.01,first_diff,Stationary,Level Non-stationary; first_diff yields Stationary. Standard I(1) treatment.
+UK,GDP,Stationary,0.00022374093099988325,0.1,level,Stationary,Level-stationary under joint ADF+KPSS; used directly in Phase 6 VAR.
+UK,M2,Non-stationary,0.13311323661560304,0.01,first_diff,Stationary,Level Non-stationary; first_diff yields Stationary. Standard I(1) treatment.
+GERMANY,CPI,Non-stationary,0.4018545176307141,0.01,yoy_pct_with_caveat,Trend-stationary (conflict),All three CPI transforms remain flagged; adopt YoY for narrative alignment and re-examine in Phase 6 robustness.
+GERMANY,POLICY_RATE,Trend-stationary (conflict),0.04920142838479238,0.01,first_diff_with_caveat,Error,Neither 'ct' nor first_diff fully resolves; first_diff adopted with caveat.
+GERMANY,UNEMPLOYMENT,Non-stationary,0.8095279034354744,0.01,first_diff,Stationary,Level Non-stationary; first_diff yields Stationary. Standard I(1) treatment.
+GERMANY,GDP,Stationary,0.002701038634099048,0.1,level,Stationary,Level-stationary under joint ADF+KPSS; used directly in Phase 6 VAR.
+GERMANY,M2,Non-stationary,0.08106652362967959,0.04919205340345072,first_diff,Stationary,Level Non-stationary; first_diff yields Stationary. Standard I(1) treatment.

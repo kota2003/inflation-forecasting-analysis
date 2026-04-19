@@ -1,6 +1,19 @@
 # ============================================================
 # Project: Inflation Prediction and Economic Signal Analysis
-# Version: 1.1 (Phase 3 complete)
+# Version: 1.2 (Phase 4 complete)
+#
+# Change log:
+#   v1.0 — Phase 0/1 initial dependency set
+#   v1.1 — Phase 3: scipy pin added (stats.f, norm, chi2 used in src/structural_breaks.py)
+#   v1.2 — Phase 4: no new dependencies added; header metadata updated
+#          (feature_engineering.py uses only pandas.shift, pandas.rolling, pd.DateOffset)
+#
+# Forward-looking:
+#   - Phase 5 (EDA): seaborn for heatmaps — already present
+#   - Phase 5 (EDA): statsmodels for ACF/PACF plots — already present
+#   - Phase 6 (ARIMA/VAR): statsmodels.tsa — already present
+#   - Phase 6 (Ridge): scikit-learn — already present
+#   - Phase 6 (model persistence): joblib — already present
 # ============================================================
 
 # --- Data Collection ---

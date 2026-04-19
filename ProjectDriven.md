@@ -1071,3 +1071,233 @@ All Phase 6 through Phase 8 notebooks will import from these four modules rather
 ---
 
 *Last updated: Phase 3 complete — four main-country datasets classified, Chow/Quandt-Andrews breaks characterised, reusable `src/` module architecture extended to v0.3.0. Next: Phase 4 feature engineering.*
+
+## Phase 4 Decisions
+
+*These decisions concern the feature engineering pipeline — base registry application, lag matrix, rolling statistics, and regime dummies — that produces the per-country feature matrices consumed by Phase 6 VAR/Ridge estimation. They are implemented in `src/feature_engineering.py` and narrated in `notebooks/04_feature_engineering.ipynb`.*
+
+---
+
+### D-034 | Lag Grid — Uniform Sparse {1, 3, 6, 12} per ProjectScope §9
+
+**Date:** Phase 4 · Step 2
+**Decision:** Adopt a uniform sparse lag grid {1, 3, 6, 12} for all indicators across all countries, applied via `pd.Series.shift(k)` on the D-031-corrected base feature form. This matches ProjectScope §9's literal Phase 4 specification.
+
+**Rationale:**
+
+1. **ProjectScope compliance**: §9 explicitly specifies "Lag features: t-1, t-3, t-6, t-12 for all indicators" as the Phase 4 deliverable. The §2 variable-specific lag hypothesis table (e.g. policy rate t-3..t-12, unemployment t-1..t-6) is annotated as a hypothesis for Phase 6 interpretation, not as a Phase 4 construction spec.
+2. **Multi-scale sampling**: {1, 3, 6, 12} samples short-run (monthly), quarterly, semi-annual, and annual dynamics without oversampling any single horizon.
+3. **Non-flooding**: 5 indicators × 4 lags = 20 lag cols/country. Phase 6 Ridge / VAR-with-AIC can select without multicollinearity collapse.
+4. **Phase 6 non-constraint**: the Phase 4 grid does not commit Phase 6 to a specific lag depth; VAR estimation still runs AIC/BIC independently.
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| Dense `range(1, 13)` | Rejected — 60 lag cols/country triggers multicollinearity; §9 specifies sparse |
+| Variable-specific per §2 | Rejected — §2 is hypothesis-level, not construction spec; implementation becomes asymmetric |
+| `{1, 3, 6, 9, 12}` superset | Rejected — marginal economic benefit of 9-lag; adds no new temporal scale |
+
+**Implementation:** `src.feature_engineering.LAG_PERIODS = (1, 3, 6, 12)`; `build_lag_matrix()` iterates outer indicator × inner lag. First-valid-date match verified against theoretical `source_first_valid + k months` for all 80 lag columns in Step 2.
+
+---
+
+### D-035 | Rolling Statistics — {3, 12} Windows × {mean, std}, Strict min_periods
+
+**Date:** Phase 4 · Step 3
+**Decision:** Compute rolling mean and rolling std at windows {3, 12} for all indicators. Right-aligned inclusive, strict `min_periods = window`, `ddof = 1` for std. Column naming `{COUNTRY}_{INDICATOR}_roll{w}_{stat}`. The std addition exceeds ProjectScope §9's "mean only" specification by one statistic per window.
+
+**Rationale:**
+
+1. **Compliance plus volatility**: §9 spec is satisfied by the mean columns; the std columns are an upgrade directly motivated by Phase 3 findings (COVID 2020 and ENERGY 2022 shocks manifest as both level shifts and variance expansions).
+2. **Phase 6 Ridge benefit**: Ridge L2 regularisation handles increased feature dimensionality natively; variance-based features are Ridge-appropriate covariates that reveal volatility regime effects the VAR alone cannot.
+3. **Non-flooding**: 5 × 2 × 2 = 20 rolling cols/country, same order of magnitude as lag cols.
+4. **Strict alignment**: `min_periods = window` yields conservative leading-NaN behaviour (no partial windows). Phase 6 may shift by 1 for strict-trailing forecasting use; Phase 4 keeps the general-purpose form.
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| {3, 12} × {mean} only (§9 literal) | Rejected as default — misses volatility regime story, which Phase 3 identified as salient |
+| {3, 6, 12} × {mean, std} | Rejected — 6m interpolates 3m/12m without distinct economic meaning |
+| `min_periods = 1` (partial windows) | Rejected — inconsistent sample size per row violates econometric convention |
+
+**Implementation:** `src.feature_engineering.ROLLING_WINDOWS = (3, 12)`, `ROLLING_STATS = ('mean', 'std')`; `build_rolling_matrix()` verified against manual aggregation at 1e-10 precision (80/80 spot checks in Step 3).
+
+---
+
+### D-036 | Regime Dummy Structure — Splits + Periods + Gated Interactions
+
+**Date:** Phase 4 · Step 4
+**Decision:** Construct three disjoint categories of regime features per country:
+
+1. **Split dummies** (persistent, 3 per country): `D_t = 1{t ≥ break_date}` for each entry in `KNOWN_BREAKS`. Emitted for all country × break combinations as a superset; Phase 6 filters per D-030 Bonferroni gating.
+2. **Period dummies** (temporary window, 2 per country): `P_t = 1{start ≤ t ≤ end}` per ProjectScope §9 "anomaly flags". GFC window `[2008-09-01, 2009-06-01]` (Lehman to NBER US recession end); COVID window `[2020-03-01, 2020-09-01]` — matches `src.structural_breaks.COVID_DUMMY_START/END` (D-029) exactly.
+3. **Interaction terms** (D-030 gated, 0–3 per country): `D_break × X_driver_transformed` for only those (country, break) pairs where D-030 identifies a regressor-valued dominant driver. Constant drivers (JPN COVID/ENERGY, UK COVID) emit **no** interaction — the split dummy alone captures the intercept shift. Not-significant cases (JPN/UK/GER × GFC) emit nothing.
+
+**Rationale:**
+
+1. **ProjectScope §9 + D-030 union**: the anomaly-period flags and the D-030 interaction channels are distinct statistical constructs (temporary window vs. persistent-from-date × regressor). Both are needed.
+2. **Superset split dummies**: emitting all 3 splits × 4 countries (12 total) as a superset, not gated, keeps Phase 6 flexible. The D-030 dominant-driver matrix decides only which interaction to instantiate, not which split dummy to expose.
+3. **Const-driver case**: when D-030 identifies the constant as dominant (intercept shift), the interaction `D × 1 ≡ D` is redundant with the split dummy itself. Suppressing it prevents column duplication.
+4. **GFC window**: anchoring the period start at the break date (2008-09) rather than the NBER recession start (2007-12) keeps the period interpretable as "post-break shock absorption window".
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| Interactions only (no splits/periods) | Rejected — ProjectScope §9 anomaly flag spec non-compliance |
+| Splits only (no periods, no interactions) | Rejected — D-030 non-compliance; loses channel specificity |
+| GFC period = NBER full recession (2007-12..2009-06) | Rejected — period starting before break is economically counterintuitive |
+| Emit const-driver interactions for symmetry | Rejected — column-duplication with the split dummy |
+
+**Implementation:** `src.feature_engineering.PERIOD_WINDOWS`, `PHASE6_REGIME_SPEC`, `build_split_dummies()`, `build_period_dummies()`, `build_interactions()`, `build_regime_matrix()`. Category totals per country: USA 8 (3+2+3), JPN 5 (3+2+0), UK 6 (3+2+1), GER 7 (3+2+2). All 26 per-column invariants verified in Step 4.
+
+---
+
+### D-037 | Module API — Single-File `src/feature_engineering.py` (v0.4.0)
+
+**Date:** Phase 4 · Step 5
+**Decision:** Consolidate all Phase 4 logic into a single module `src/feature_engineering.py` organised in 5 layers: (1) decision-log constants, (2) registry loading, (3) component builders (transform, lag, rolling, splits, periods, interactions, regime), (4) assembly (per-country, all-country), (5) schema writer. Bump `src/__init__.py` from v0.3.0 to v0.4.0.
+
+**Rationale:**
+
+1. **Mirror Phase 2 and Phase 3 patterns**: `src/preprocessing.py` (Phase 2) and `src/stationarity.py` + `src/structural_breaks.py` (Phase 3) each own one analytical domain. Phase 4 is a single domain (feature construction), not two.
+2. **Layer separation permits unit testability**: components are independently callable without the full assembly wrapper, making the Step 5 regression-test vs. Step 2/3/4 scratch CSVs straightforward.
+3. **Default-argument injection**: `build_country_features(country, df=None, eff_reg=None, project_root=None)` supports both CLI and notebook use. Passing `df` avoids re-reading processed CSVs in notebook narrative.
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| Three files (`lag.py`, `rolling.py`, `regime.py`) | Rejected — Phase 4 functions are tightly coupled (all operate on the base feature frame); over-fragmentation for 4 layers |
+| Monolithic `build_features()` with no components | Rejected — kills unit testability and regression-test decomposition |
+| Pre-emptive split Phase 4 + Phase 6 helpers | Rejected — Phase 6 helpers don't exist yet; YAGNI |
+
+**Implementation:** `src/feature_engineering.py` (~390 lines, 17 public exports); `src/__init__.py` re-exports all 17 under v0.4.0; `src.__version__ = "0.4.0"`.
+
+---
+
+### D-038 | D-031 Override Location — Module-Embedded `REGISTRY_OVERRIDES`
+
+**Date:** Phase 4 · Step 1
+**Decision:** Embed the D-031 runtime overrides as a module-level constant `REGISTRY_OVERRIDES` in `src.feature_engineering`, applied automatically by `load_effective_registry()`. The Phase 3 override in `scripts/phase3_step4_*.py::REGISTRY_OVERRIDES` is a Phase 3 state artefact and is NOT reused from Phase 4.
+
+**Rationale:**
+
+1. **Single source of truth for Phase 4/6**: callers (S1–S5 scripts, notebook, future Phase 6 estimators) all share one dict. No per-caller drift.
+2. **D-011 convention preservation**: hard-coded decision-log constants live in `src/` (`M2_UNITS`, `ADF_REGRESSION_LEVEL`, `PHASE6_REGIME_SPEC` all follow this pattern).
+3. **Phase 3 script independence**: the Phase 3 scratch script's copy is test-fixture state and must not change retroactively. Duplicating the dict at Phase 4 decouples the two epochs cleanly.
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| Caller-applied override (pass dict parameter) | Rejected — every caller would re-encode the same three entries; drift risk |
+| Re-import from `scripts/phase3_step4_*` | Rejected — introduces `src/` → `scripts/` import coupling |
+| Embed in `src.stationarity` alongside `TRANSFORM_FN` | Rejected — override is Phase 4/6-specific, not universal stationarity logic |
+
+**Implementation:** `src.feature_engineering.REGISTRY_OVERRIDES`; `load_effective_registry()` applies it by default. Stored values match the Phase 3 script exactly: JPN CPI → `first_diff`, GER CPI → `first_diff`, UK CPI → `log_diff_pct`.
+
+---
+
+### D-039 | Output Format — Per-Country Wide CSV, Leading NaN Preserved
+
+**Date:** Phase 4 · Step 5
+**Decision:** Write per-country feature matrices to `data/processed/features_{country}.csv` in wide format with columns ordered `base → lag → rolling → split → period → interaction`. Leading NaN is **preserved** (joint-valid window trimming is a Phase 6 decision, not Phase 4's). Auto-generate `data/processed/features_schema.md` via `write_features_schema_md()`.
+
+**Rationale:**
+
+1. **VAR/Ridge ingestion-ready**: wide format is the expected input shape; date on index, features on columns.
+2. **Leading-NaN preservation gives Phase 6 flexibility**: Phase 6 ARIMA on single series doesn't need full joint-valid; Phase 6 VAR may choose a longer estimation window for one country; Phase 6 Ridge may impute. Dropping leading NaN at Phase 4 forces a narrower window on everyone.
+3. **Column ordering is pedagogically clean**: base comes first (interpretable), regime comes last (Phase 6-specific), lag/rolling in between. Notebook displays inherit this ordering.
+4. **Schema file mirrors D-023 pattern**: `data/processed/features_schema.md` echoes `data/processed/schema.md` from Phase 2 — single-source-of-truth documentation auto-regenerated at assembly time.
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| Joint-valid-only export (`dropna(how='any')`) | Rejected — loses 12–22 obs per country; forces Phase 6 window |
+| Long format (country, date, feature, value) | Rejected — 5k+ rows/country; VAR consumers need wide |
+| Separate category files (base.csv, lag.csv, …) | Rejected — Phase 6 joins re-do Phase 4 work |
+| Single cross-country features.csv with country as index level | Rejected — JPN/USA have 298 rows, UK/GER have 291; different column sets post-interactions |
+
+**Implementation:** `scripts/phase4_step5_assemble.py` writes 4 CSVs + 1 schema; column counts per country 50 (JPN), 51 (UK), 52 (GER), 53 (USA).
+
+---
+
+### D-040 | Feature Selection Timing — Superset at Phase 4, Selection at Phase 6
+
+**Date:** Phase 4 · Step 5
+**Decision:** Phase 4 delivers the full feature superset (50–53 cols/country). Feature selection — dropping, pruning, regularisation-based shrinkage — is entirely a Phase 6 responsibility.
+
+**Rationale:**
+
+1. **Model-family independence**: Phase 4 doesn't know which Phase 6 model consumes which column. ARIMA uses only the CPI column; VAR uses 5 baseline series; Ridge uses everything under L2.
+2. **Ridge L2 native handling**: the highest-dimensional Phase 6 model (Ridge) handles multicollinearity via regularisation. Pre-pruning removes information Ridge could have used.
+3. **VAR AIC/BIC independence**: VAR's lag selection via AIC/BIC operates on the 5-variable system, not on our lag-column superset. Phase 4 pre-pruning would misalign with the VAR's own selection.
+4. **Portfolio separation-of-concerns**: "Feature construction" (Phase 4) and "Feature selection" (Phase 6) are distinct Portfolio chapters.
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| Preliminary variance/correlation filter | Rejected — premature; biases downstream model comparison |
+| Phase 4-side AIC-based lag pruning | Rejected — couples Phase 4 to a specific model family |
+| L1 penalty pre-screen | Rejected — anticipates Ridge L2, not the Phase 6 spec |
+
+**Implementation:** No dropping. Per-country feature matrix shape passed through `build_country_features()` untouched (base 5 + lag 20 + rolling 20 + regime 5–8).
+
+---
+
+## Phase 4 Final State — Summary
+
+**After Phase 4 feature engineering (4 main-country feature matrices):**
+
+| Metric | Phase 3 | Phase 4 |
+|---|---|---|
+| Data state | Classified + break-characterised | **Feature matrices ready for Phase 6 ingestion** |
+| Module architecture | 4 modules at v0.3.0 | **5 modules at v0.4.0** (77 exports) |
+| Registry application | Scratch script state | **Module-embedded `REGISTRY_OVERRIDES`** |
+| Features per country | — | **50 (JPN), 51 (UK), 52 (GER), 53 (USA)** |
+| Joint-valid start | — | **USA 2003-01; JPN/UK/GER 2002-02** |
+| Module-vs-scratch regression test | — | **12/12 passed, max_abs_diff ≤ 3.55×10⁻¹⁵** |
+| Phase 6 readiness | Transformation decisions final | ✅ **Ready (VAR/Ridge wide-format CSVs)** |
+
+**Reusable module architecture extended (v0.3.0 → v0.4.0):**
+
+| Module | Purpose | LOC (approx) | Exports |
+|---|---|---|---|
+| `src/data_loader.py` | I/O helpers | unchanged | 9 |
+| `src/preprocessing.py` | Phase 2 transformations | unchanged | 14 |
+| `src/stationarity.py` | Phase 3 ADF/KPSS + transforms | unchanged | 20 |
+| `src/structural_breaks.py` | Phase 3 Chow + Quandt-Andrews | unchanged | 16 |
+| `src/feature_engineering.py` | Phase 4 feature construction | ~390 | 17 |
+| `src/__init__.py` (v0.4.0) | Package meta + re-exports | ~180 | 77 total |
+
+**Artifacts produced:**
+
+- `src/feature_engineering.py` (new module per D-037)
+- `src/__init__.py` bumped to v0.4.0
+- `scripts/phase4_step[1-5]_*.py` — five scratch orchestrators (S1 base registry; S2 lags; S3 rolling; S4 regime; S5 module assembly + consistency proof)
+- `data/documentation/phase4_step1_effective_registry.csv` (20 rows)
+- `data/documentation/phase4_step1_base_features_summary.csv` (20 rows)
+- `data/documentation/phase4_step1_base_features_preview.csv` (long-form head+tail)
+- `data/documentation/phase4_step2_lag_{country}.csv` (× 4) + `phase4_step2_lag_summary.csv` (80 rows)
+- `data/documentation/phase4_step3_rolling_{country}.csv` (× 4) + `phase4_step3_rolling_summary.csv` (80 rows, incl. 1e-10 spot-check)
+- `data/documentation/phase4_step4_regime_{country}.csv` (× 4) + `phase4_step4_regime_summary.csv` (26 rows) + `phase4_step4_regime_specification.csv` (12 rows, D-030 matrix echo)
+- `data/documentation/phase4_step5_category_counts.csv`, `phase4_step5_joint_valid_summary.csv`, `phase4_step5_consistency_check.csv` (12 rows: 3 per country × 4 countries)
+- `data/processed/features_{usa,japan,uk,germany}.csv` (× 4; 291–298 rows × 50–53 cols)
+- `data/processed/features_schema.md` (auto-generated)
+- `notebooks/04_feature_engineering.ipynb` — Portfolio-grade narrative of the seven Phase 4 decisions (D-034 through D-040)
+
+**Phase 5 prerequisites ready:**
+
+- `features_{country}.csv` × 4 as primary Phase 5 input, loadable via `pd.read_csv` (or a future `src.data_loader.load_features_main()` wrapper)
+- Joint-valid windows established and documented per `features_schema.md`
+- All features `float64`, leading-NaN-only pattern verified by 206+ per-column invariants across S1–S4 (20 base + 80 lag + 80 rolling + 26 regime = 206)
+- Module-vs-scratch regression test passes at IEEE 754 floating-point rounding precision (1e-10 tolerance, max_abs_diff ≤ 3.55×10⁻¹⁵)
+
+---
+
+*Last updated: Phase 4 complete — per-country feature matrices of 50–53 columns built, reusable `src/` module architecture extended to v0.4.0 with 5 modules and 77 total exports. Next: Phase 5 exploratory data analysis.*

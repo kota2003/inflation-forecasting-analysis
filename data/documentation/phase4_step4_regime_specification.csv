@@ -1,0 +1,13 @@
+country,break,dominant_driver,generates_interaction
+USA,GFC_2008,M2,True
+USA,COVID_2020,POLICY_RATE,True
+USA,ENERGY_2022,POLICY_RATE,True
+JAPAN,GFC_2008,not_significant,False
+JAPAN,COVID_2020,const,False
+JAPAN,ENERGY_2022,const,False
+UK,GFC_2008,not_significant,False
+UK,COVID_2020,const,False
+UK,ENERGY_2022,GDP,True
+GERMANY,GFC_2008,not_significant,False
+GERMANY,COVID_2020,GDP,True
+GERMANY,ENERGY_2022,GDP,True

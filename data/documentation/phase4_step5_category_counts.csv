@@ -1,0 +1,5 @@
+country,base,lag,rolling,split,period,interaction,total
+USA,5,20,20,3,2,3,53
+JAPAN,5,20,20,3,2,0,50
+UK,5,20,20,3,2,1,51
+GERMANY,5,20,20,3,2,2,52
