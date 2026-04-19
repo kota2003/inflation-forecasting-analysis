@@ -1,6 +1,6 @@
 # ============================================================
 # Project: Inflation Prediction and Economic Signal Analysis
-# Version: 1.0
+# Version: 1.1 (Phase 3 complete)
 # ============================================================
 
 # --- Data Collection ---
@@ -14,6 +14,7 @@ numpy==1.26.0
 
 # --- Time-Series & Econometrics ---
 statsmodels==0.14.0
+scipy>=1.11.0          # Phase 3: scipy.stats.f, norm, chi2 used directly in src/structural_breaks.py
 
 # --- Machine Learning ---
 scikit-learn==1.3.0

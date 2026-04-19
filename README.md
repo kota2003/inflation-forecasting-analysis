@@ -1,26 +1,8 @@
 # Inflation Prediction and Economic Signal Analysis
 
-A Multi-Country Time-Series Study of Central-Bank Policy, Unemployment, and Money Supply as Drivers of Inflation
+A multi-country econometric study forecasting consumer price inflation across USA, Japan, UK, and Germany (2000-01 to present) using ARIMA, VAR, and Ridge Regression. The analysis combines classical time-series rigour with modern data-engineering practice and documents every design decision in a living decision log.
 
----
-
-## Overview
-
-This project builds multi-country vector autoregression (VAR) models to decompose inflation dynamics into their contributing channels — central-bank policy rates, unemployment, real activity, and money supply — for four advanced economies with structurally distinct inflation histories: **USA, Japan, UK, and Germany**. China is included as a supplementary descriptive comparison with explicit reliability caveats.
-
-Three narrative questions drive the analysis:
-
-- **N1 — The Phillips Curve in Practice.** Did the post-GFC decade genuinely break the inflation–unemployment relationship, and did the 2022 shock restore it?
-- **N2 — Monetary Policy Lag.** How many months after a central bank tightens does inflation actually respond? Do impulse response functions match the "6-to-18 months" textbook claim?
-- **N3 — Japan's Uniqueness.** Why did 30 years of low-zero inflation end abruptly in 2022? Is the mechanism pass-through from global commodity prices, or a domestic structural break?
-
-The analysis combines classical econometrics (ARIMA baselines, VAR core, Granger causality, impulse response functions, forecast error variance decomposition) with a regularised machine-learning comparator (Ridge regression on engineered lag features). Every design decision is recorded in [`ProjectDriven.md`](ProjectDriven.md); the full analytical scope is in [`ProjectScope_v1.md`](ProjectScope_v1.md).
-
----
-
-## Why Portfolio Project 3 Takes This Angle
-
-This is the third project in a seven-project data-science portfolio targeting Japanese technology-consulting roles. P1 demonstrated machine-learning engineering on structured customer data; P2 covered feature engineering and classification with interpretability tools; this P3 demonstrates **classical econometric rigour combined with modern data engineering**. The project deliberately prioritises decision documentation, source auditing, and reproducibility over algorithmic novelty — the skills most valued in consulting contexts where analytical defensibility matters more than headline accuracy.
+This is **Portfolio Project 3 (P3)** in a three-project series. P1 demonstrated machine-learning engineering on structured customer data; P2 covered feature engineering and classification with interpretability tools; this P3 demonstrates **classical econometric rigour combined with modern data engineering**. The project deliberately prioritises decision documentation, source auditing, and reproducibility over algorithmic novelty — the skills most valued in consulting contexts where analytical defensibility matters more than headline accuracy.
 
 ---
 
@@ -31,14 +13,14 @@ This is the third project in a seven-project data-science portfolio targeting Ja
 | Phase 0 | Project scoping, country selection, narrative definition | ✅ Complete |
 | Phase 1 | Data collection — 25 series, 5 countries × 5 indicators, multi-source rebuild | ✅ Complete |
 | Phase 2 | Data cleaning, unit harmonisation, temporal alignment | ✅ Complete |
-| Phase 3 | Stationarity testing (ADF), structural-break testing (Chow) | ⏳ Next |
-| Phase 4 | Feature engineering (lags, rolling statistics, regime dummies) | Pending |
+| Phase 3 | Stationarity testing (ADF+KPSS), structural-break testing (Chow, Quandt-Andrews) | ✅ **Complete** |
+| Phase 4 | Feature engineering (lags, rolling statistics, regime dummies) | ⏳ Next |
 | Phase 5 | Exploratory data analysis & cross-country narrative visualisation | Pending |
 | Phase 6 | Model estimation — ARIMA, VAR, Ridge | Pending |
 | Phase 7 | Evaluation — Diebold-Mariano, walk-forward validation | Pending |
 | Phase 8 | Interpretation — Granger maps, IRF plots, narrative synthesis | Pending |
 
-As of this writing, the `data/processed/` directory contains four fully-observed main-country datasets (USA, Japan, UK, Germany — NaN-free, 2001-01 onwards) and one supplementary dataset (China, sparse by design). All are VAR-ingestion-ready via `src.data_loader.load_processed_main()`.
+As of this writing, the `data/processed/` directory contains four fully-observed main-country datasets (USA, Japan, UK, Germany — NaN-free, 2001-01 onwards) and one supplementary dataset (China, sparse by design). All are VAR-ingestion-ready via `src.data_loader.load_processed_main()`. Phase 3 has classified every series' stationarity status, characterised three pre-specified structural breaks (2008-09, 2020-03, 2022-02) via three Chow variants, and independently confirmed the ENERGY_2022 break via Quandt-Andrews sup-Wald scan at two trim fractions.
 
 ---
 
@@ -65,24 +47,38 @@ inflation-forecasting-analysis/
 │       ├── phase2_cleaning_log.csv
 │       ├── phase2_germany_m2_scout.csv
 │       ├── phase2_m2_yoy_validation.csv
-│       └── phase2_ip_scout*.csv         # Chow-Lin due diligence (rejected)
+│       ├── phase2_ip_scout*.csv         # Chow-Lin due diligence (rejected)
+│       ├── phase3_adf_kpss_levels.csv   # Phase 3 Task 1 audit artefacts
+│       ├── phase3_differencing_log.csv
+│       ├── phase3_cpi_deep_dive.csv
+│       ├── phase3_subperiod_stationarity.csv
+│       ├── phase3_transformation_registry_final.csv    # source of truth for D-027/D-031
+│       ├── phase3_chow_tests_{classical,hac,covid_dummy}.csv
+│       ├── phase3_chow_coefficient_decomposition.csv   # input to D-030
+│       ├── phase3_chow_bonferroni_summary.csv
+│       └── phase3_quandt_andrews_*.csv  # Task 2 sup-Wald scans (π₀ = 0.15 & 0.10)
 ├── src/                                  # Reusable Python modules (imported by notebooks)
-│   ├── __init__.py                       # Package v0.2.0
+│   ├── __init__.py                       # Package v0.3.0
 │   ├── data_loader.py                    # I/O helpers for raw & processed datasets
-│   └── preprocessing.py                  # Phase 2 transformation functions
+│   ├── preprocessing.py                  # Phase 2 transformation functions
+│   ├── stationarity.py                   # Phase 3 Task 1 — ADF/KPSS, 4-quadrant, transforms
+│   └── structural_breaks.py              # Phase 3 Task 2 — Chow, decomposition, Quandt-Andrews
 ├── scripts/
-│   └── rebuild_processed.py              # CLI orchestrator — regenerates data/processed/
+│   ├── rebuild_processed.py              # CLI orchestrator — regenerates data/processed/
+│   ├── regenerate_phase2_audits.py       # Regenerates Phase 2 audit CSVs
+│   └── phase3_step*.py                   # Phase 3 scratch scripts (S1–S5b, audit trail)
 ├── notebooks/
 │   ├── 00_environment_test.ipynb         # Environment verification
 │   ├── 01_data_collection.ipynb          # Phase 1 — data collection & quality assurance
-│   └── 02_cleaning_alignment.ipynb       # Phase 2 — cleaning, alignment, harmonisation
+│   ├── 02_cleaning_alignment.ipynb       # Phase 2 — cleaning, alignment, harmonisation
+│   └── 03_stationarity_structural_breaks.ipynb  # Phase 3 — stationarity & structural breaks
 ├── outputs/
-│   └── figures/                          # Phase-specific visualisations
+│   └── figures/                          # Phase-specific visualisations (Phase 2 + Phase 3 panels)
 ├── .env.example                          # Template for FRED API key
-├── requirements.txt                      # Python dependencies
+├── requirements.txt                      # Python dependencies (v1.1, scipy pinned)
 ├── README.md                             # This file
 ├── ProjectScope_v1.md                    # Full analytical scope (§1–§14)
-└── ProjectDriven.md                      # Living decision log (D-001 through D-023)
+└── ProjectDriven.md                      # Living decision log (D-001 through D-033)
 ```
 
 ---
@@ -124,91 +120,64 @@ The notebook archives any prior `data/raw/` contents, performs the Phase 1 v2 re
 
 ### Regenerate `data/processed/`
 
-Two equivalent paths are available:
+Phase 2 cleaning and alignment is reproducible via either the notebook or the CLI orchestrator:
 
-**Path A — CLI (fastest, non-interactive):**
 ```bash
-python scripts/rebuild_processed.py
-# ~15 seconds; reads data/raw/*.csv, writes 5 CSVs + audit log
-```
-
-**Path B — Notebook (narrated, portfolio-readable):**
-```bash
+# Option A: notebook narrative
 jupyter lab notebooks/02_cleaning_alignment.ipynb
-# Run All → ~30 seconds; same transformations, plus mathematical commentary,
-# economic-history validation tables, and 3 portfolio-grade figures
+
+# Option B: CLI
+python scripts/rebuild_processed.py
 ```
 
-Both paths import from `src/preprocessing.py` — the single source of truth for all transformation logic.
+Both paths call `src.preprocessing.build_all_processed()` and write identical outputs.
 
-### Regenerate audit/documentation CSVs
+### Regenerate Phase 3 artefacts
 
-If `data/documentation/` is missing Phase 2 audit CSVs (e.g., after a fresh clone or cleanup), regenerate them via:
+Phase 3 audit CSVs are produced by the `scripts/phase3_step*.py` series (S1 → S5b), each focused on a single analytical question. All logic also lives in the reusable modules (`src/stationarity.py`, `src/structural_breaks.py`); the Portfolio notebook exercises the same functions from a single narrative layer:
 
 ```bash
-python scripts/regenerate_phase2_audits.py
+# Run scratch scripts in sequence (optional — audit trail)
+python scripts/phase3_step1_adf_kpss_levels.py
+python scripts/phase3_step2_differencing.py
+python scripts/phase3_step3_cpi_decision_and_registry.py
+python scripts/phase3_step4_chow_structural_breaks.py
+python scripts/phase3_step5_quandt_andrews.py
+python scripts/phase3_step5b_quandt_andrews_trim10.py
+
+# Or simply run the Portfolio notebook (Run All, ~2–3 minutes)
+jupyter lab notebooks/03_stationarity_structural_breaks.ipynb
 ```
 
-This rebuilds (a) `phase2_m2_yoy_validation.csv` — M2 YoY transformation validation with economic-history peak-date checks, (b) `phase2_cleaning_log.csv` — per-file audit of the processed/ outputs, and (c) `phase2_germany_m2_scout.csv` — D-021 scout log (requires `FRED_API_KEY` in `.env`; skipped gracefully otherwise).
+---
+
+## Phase 3 Highlights
+
+Four interwoven signature findings:
+
+1. **Statistical robustness.** Classical vs HAC Chow agree 12/12 on reject/non-reject; HAC vs COVID-dummy HAC agree 8/8. Autocorrelation, heteroskedasticity, and COVID outliers do not drive the conclusions. All nine HAC rejects survive Bonferroni at family-wise α = 0.05/12.
+
+2. **GFC_2008 is USA-specific.** Only USA rejects at α = 0.05 at the Global Financial Crisis break. Japan, UK, and Germany show p-values between 0.06 and 0.53 — consistent with differential ECB/BOJ liquidity responses dampening the CPI–macro relationship's response to 2008.
+
+3. **Break channel differs by country at the same date.** At ENERGY_2022, the dominant regressor is `POLICY_RATE` for USA (z = +5.95), the `const` for Japan (z = +4.98), and `GDP` for UK and Germany (z = +3.58, +2.82). The same calendar-month event operated through different economic channels in different economies — the finding that links project narratives N1 (Phillips Curve), N2 (Monetary Policy Lag), and N3 (Japan's Uniqueness) to one statistical event.
+
+4. **Data-driven break detection confirms the ex-ante specification.** Quandt-Andrews argmax at π₀ = 0.10 falls within ±1 month of 2022-02 for all four countries. USA sup-W = 37.73 exceeds the Andrews 1% critical value (23.04). The data independently pinpoint the break date that ProjectScope identified from economic reasoning alone — the Phase 3 signature finding.
+
+See `notebooks/03_stationarity_structural_breaks.ipynb` for the full narrative and `ProjectDriven.md` entries D-024 through D-033 for decision rationale.
 
 ---
 
-## Data Sources
+## References
 
-| Source | Role | Series used |
-|---|---|---|
-| [FRED](https://fred.stlouisfed.org/) (Federal Reserve Bank of St. Louis) | Primary — 23 of 25 series | CPI, policy rates, unemployment, GDP, M2 across USA/JPN/UK/GER/CHN |
-| [Statistics Bureau of Japan](https://www.stat.go.jp/data/cpi/) (総務省統計局) | Phase 1 v2 rebuild | Japan CPI (`zmi2020s.csv`, 2020-base, per D-016) |
-| [World Bank](https://data.worldbank.org/) | Phase 1 | China unemployment (annual, SL.UEM.TOTL.ZS) |
-| [UK ONS](https://www.ons.gov.uk/) | Chow-Lin due diligence (retained, unused) | UK Index of Production K222 |
-
----
-
-## Honest Data Integrity Caveats
-
-Reviewers and future collaborators should read these before interpreting the results:
-
-1. **Germany M2 is Euro-area-wide, not German national.** Following 1999 euro adoption, Germany does not maintain a national monetary aggregate; D-021 adopts `MABMM301EZM657S` (Euro-area M2) as the institutionally-correct substitute. Cross-country M2 comparisons for Germany must be read as national-vs-currency-union, not national-vs-national.
-
-2. **UK and Germany CPI end at 2025-03.** OECD harmonised publication for these two lags approximately 13 months. Their effective windows end 2025-03 and their datasets contain 291 rows (vs 298 for USA/JPN). Sufficient for VAR estimation but the latest inflation cycle (Q2-2025 onwards) is out-of-sample for these two.
-
-3. **Monthly GDP is linearly interpolated from quarterly.** D-018 adopts linear interpolation on the quarterly level; within-quarter GDP variation in the processed data is an interpolation artefact, not a measurement. The Chow-Lin due diligence archive (`data/documentation/phase2_ip_scout*.csv`) documents why a more sophisticated method was evaluated and rejected as disproportionate to GDP's role in the VAR (one of 5 regressors under short lags).
-
-4. **M2 YoY was computed from MoM % source for 3 of 4 main countries.** The `MABMM301...657S` FRED series documentation labels them "growth rate same period previous year," but their empirical distributions (max ~2-5 %, std < 1 %) are incompatible with YoY growth. D-012 (amended) corrects this via a cumulative-product conversion from MoM. Post-conversion peak dates align with known monetary-policy episodes across all four countries — the empirical validation is in `notebooks/02_cleaning_alignment.ipynb` §5.5.
-
-5. **China is supplementary only.** China's CPI (WARNING freshness), policy rate (WARNING), M2 (CRITICAL, ends 2018-12), and annual unemployment are incorporated for descriptive cross-country context only. D-001 excludes China from the main VAR due to documented reliability concerns (GDP targets, CPI basket opacity, urban-only unemployment coverage).
-
-6. **Structural breaks at 2008-09, 2020-03, and 2022-02 are untreated in Phase 2.** The VAR coefficients estimated on 2001–2019 training data (per D-005) may not generalise to post-2020 test data without explicit regime-dummy or split-sample treatment. Phase 3 will test for structural breaks at these three candidate dates via Chow tests, and Phase 6 will adjust the VAR specification accordingly.
-
----
-
-## Portfolio Context
-
-This project is the third in a seven-project data-science portfolio prepared for Japanese technology-consulting and data-platform roles.
-
-| # | Project | Analytical focus | Status |
-|---|---|---|---|
-| P1 | Supermarket Price Analysis and ML Classification (Product Categorization) | Data engineering, cleaning, and baseline ML classification | Complete |
-| P2 | Customer Segmentation and Business Insights (Marketing Analytics) | Feature engineering, segmentation, interpretability | Complete |
-| **P3** | **Inflation Prediction and Economic Signal Analysis** | **Classical econometrics + data engineering** | **In progress — Phase 2 complete** |
-| P4 | Bank Churn Prediction | Imbalanced-class ML, SHAP interpretability | Planned |
-| P5 | Time-Series Sales Forecasting (Retail) | Prophet / LSTM / tree-based forecasting | Planned |
-| P6 | Deep Learning Classification (Image Recognition) | CNN architectures, transfer learning | Planned |
-| P7 | End-to-End ML Pipeline with Deployment | MLOps, cloud deployment, API serving | Planned |
-
-P3 deliberately focuses on econometric methodology and analytical defensibility. P5 will cover applied time-series forecasting from a different angle (demand forecasting with tree-based and deep models); P3's VAR framework is complementary, emphasising causal interpretation over forecast accuracy.
-
----
-
-## Key References
-
-- **Phillips, A. W.** (1958). *The Relation between Unemployment and the Rate of Change of Money Wage Rates in the United Kingdom, 1861–1957.* Economica.
-- **Friedman, M.** (1956). *The Quantity Theory of Money — A Restatement.* Studies in the Quantity Theory of Money.
-- **Taylor, J. B.** (1993). *Discretion versus Policy Rules in Practice.* Carnegie-Rochester Conference Series on Public Policy.
-- **Sims, C. A.** (1980). *Macroeconomics and Reality.* Econometrica, 48(1), 1–48.
+- **Andrews, D. W. K.** (1993). *Tests for Parameter Instability and Structural Change with Unknown Change Point.* Econometrica, 61(4), 821–856.
+- **Chow, G. C.** (1960). *Tests of Equality Between Sets of Coefficients in Two Linear Regressions.* Econometrica, 28(3), 591–605.
 - **Chow, G. C., & Lin, A. L.** (1971). *Best Linear Unbiased Interpolation, Distribution, and Extrapolation of Time Series by Related Series.* Review of Economics and Statistics, 53(4), 372–375.
 - **Diebold, F. X., & Mariano, R. S.** (1995). *Comparing Predictive Accuracy.* Journal of Business & Economic Statistics, 13(3), 253–263.
 - **Fernald, J. G., Hsu, E., & Spiegel, M. M.** (2021). *Is China fudging its GDP figures? Evidence from trading partner data.* Journal of International Money and Finance.
+- **Hansen, B. E.** (1997). *Approximate Asymptotic P Values for Structural-Change Tests.* Journal of Business & Economic Statistics, 15(1), 60–67.
+- **Kwiatkowski, D., Phillips, P. C. B., Schmidt, P., & Shin, Y.** (1992). *Testing the Null Hypothesis of Stationarity Against the Alternative of a Unit Root.* Journal of Econometrics, 54(1–3), 159–178.
+- **Newey, W. K., & West, K. D.** (1987). *A Simple, Positive Semi-Definite, Heteroskedasticity and Autocorrelation Consistent Covariance Matrix.* Econometrica, 55(3), 703–708.
+- **Schwert, G. W.** (1989). *Tests for Unit Roots: A Monte Carlo Investigation.* Journal of Business & Economic Statistics, 7(2), 147–159.
 
 ---
 
@@ -220,4 +189,4 @@ See [`ProjectDriven.md`](ProjectDriven.md) for the complete decision log and [`P
 
 ---
 
-*Last updated: Phase 2 complete — 4 main + 1 supplementary datasets in `data/processed/`, VAR-ready, reusable `src/` module architecture established. Next: Phase 3 stationarity & structural-break testing.*
+*Last updated: Phase 3 complete — four main-country datasets classified, Chow/Quandt-Andrews breaks characterised, reusable `src/` module architecture extended to v0.3.0 with 4 modules and 60 total exports. Next: Phase 4 feature engineering.*

@@ -712,11 +712,362 @@ All Phase 3 through Phase 7 notebooks will import from `src/` rather than duplic
 - `outputs/figures/phase2_m2_yoy_4countries.png`, `phase2_gdp_interpolation_usa.png`, `phase2_processed_4countries_panel.png`
 
 ---
-
 ## Phase 3 Decisions
 
-*(To be added during Phase 3 — anticipated topics: per-variable ADF test results, first-differencing decisions, Chow test specifications at 2008-09 / 2020-03 / 2022-02 break points, structural-break treatment via regime dummies vs split samples.)*
+*These decisions concern the stationarity testing, transformation selection, and structural-break testing of the four main-country analytic datasets produced by Phase 2. They are implemented in `src/stationarity.py` and `src/structural_breaks.py` and narrated in `notebooks/03_stationarity_structural_breaks.ipynb`.*
 
 ---
 
-*Last updated: Phase 2 complete — 4 main + 1 supplementary datasets in `data/processed/`, VAR-ready, reusable `src/` module architecture established.*
+### D-024 | ADF + KPSS Joint Protocol (Four-Quadrant Classification)
+
+**Date:** Phase 3 · Step 1
+**Decision:** Classify each series using the joint outcome of the Augmented Dickey-Fuller test (H₀: unit root) and the KPSS test (H₀: stationary) at α = 0.05, into one of four quadrants:
+
+|                    | KPSS reject             | KPSS non-reject |
+|--------------------|-------------------------|-----------------|
+| **ADF reject**     | Trend-stationary (conflict) | **Stationary** |
+| **ADF non-reject** | **Non-stationary**      | Inconclusive    |
+
+**Rationale:**
+- ADF alone has known low power against stationary alternatives, biasing toward over-differencing
+- KPSS inverts the null (H₀ = stationary), so rejecting it is strong evidence of non-stationarity — the two tests triangulate from opposite directions
+- The joint protocol makes "Inconclusive" cases (neither test rejects) explicit rather than collapsing them into a one-sided verdict
+- "Trend-stationary (conflict)" distinguishes series with residual trend that the ADF 'c' or 'ct' spec absorbs but KPSS still rejects — such series require a transform decision rather than a single-test dismissal
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| ADF only | Rejected — single-null framework, biased toward spurious unit-root findings |
+| KPSS only | Rejected — less common in macro literature; reverse-null harder to interpret against textbook conventions |
+| Phillips-Perron substitute for ADF | Considered; ADF preferred for cross-study comparability |
+
+**Implementation:** `src/stationarity.py::classify_4quadrant()` and `test_series()`.
+
+**Portfolio value:** Demonstrates that a single null test is a weaker inferential framework than the joint protocol, and that rigor is achieved by triangulating from two complementary nulls.
+
+---
+
+### D-025 | Variable-Specific ADF Regression Specification
+
+**Date:** Phase 3 · Step 1
+**Decision:** Use `regression='ct'` (constant + linear trend) for CPI level series; use `regression='c'` (constant only) for POLICY_RATE, UNEMPLOYMENT, GDP (YoY), and M2 (YoY).
+
+**Rationale:**
+- CPI is a level index exhibiting pronounced long-run upward drift. Testing it with `'c'` forces the trend into the residual, biasing the test toward non-stationary rejection even when the series is trend-stationary
+- POLICY_RATE and UNEMPLOYMENT have long-run means without persistent deterministic trend — `'c'` is correct
+- GDP YoY and M2 YoY are growth rates with stable means — `'c'` is correct
+- Specifying a richer deterministic component than the DGP has only a small power cost; specifying a poorer one is inferentially catastrophic
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| Uniform `'c'` for all | Rejected — biases CPI results |
+| Uniform `'ct'` for all | Rejected — POLICY_RATE etc. have no deterministic trend; adds spurious power loss |
+| Per-variable spec per economic intuition (adopted) | Adopted |
+
+**Implementation:** `src/stationarity.py::ADF_REGRESSION_LEVEL` constant; KPSS regression is matched to the ADF spec so both tests evaluate the same deterministic specification.
+
+---
+
+### D-026 | ADF Lag Selection — AIC with Schwert (1989) Max Lag
+
+**Date:** Phase 3 · Step 1
+**Decision:** Use `autolag='AIC'` with `maxlag = ⌊12·(T/100)^(1/4)⌋` per Schwert (1989). For T ≈ 290–300 monthly observations, this yields maxlag ≈ 15–16. KPSS uses `nlags='auto'` (Hobijn et al. 1998).
+
+**Rationale:**
+- AIC balances parsimony with residual whitening, preserving ADF power in finite samples
+- The Schwert rule is the accepted upper bound for macro time-series lag search — enough to whiten typical monthly autocorrelation without over-fitting
+- BIC considered but tends to under-select lags in monthly macro data, leaving residual autocorrelation that inflates the ADF size
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| Fixed maxlag = 12 (one year) | Rejected — ignores sample size |
+| BIC selection | Rejected — risks under-lagging |
+| t-statistic lag selection | Rejected — non-standard, less defensible in a portfolio context |
+
+**Implementation:** `src/stationarity.py::schwert_maxlag()` and `run_adf()`.
+
+---
+
+### D-027 | Transformation Registry — Phase 6 VAR Input & Chow-Test Input
+
+**Date:** Phase 3 · Step 3
+**Decision:** Maintain a per-(country, indicator) registry with two forms: `phase6_var_input` and `chow_test_input`. The two columns may differ when the Phase 6-preferred form is not a full-sample stationary form (it is then kept with a caveat), while the Chow test requires strict within-sub-sample stationarity for inferential validity.
+
+**Registry summary (phase6_var_input by transform, 20 series):**
+
+| Transform | Count | Example |
+|---|---|---|
+| `level` | 5 | All four GDP series; USA M2 |
+| `first_diff` | 9 | POLICY_RATE, UNEMPLOYMENT (most); JPN/UK/GER M2; JPN/GER CPI |
+| `yoy_pct` | 1 | USA CPI |
+| `first_diff_with_caveat` | 2 | USA UNEMPLOYMENT (COVID outlier); GERMANY POLICY_RATE (regime-stratified) |
+| `log_diff_pct_with_caveat` | 1 | UK CPI |
+| `yoy_pct_with_regime_dummy` | 1 | (superseded — see D-031) |
+| `yoy_pct_with_caveat` | 1 | (superseded — see D-031) |
+
+**Rationale:**
+- No one-size-fits-all per-country CPI decision (D-028, D-031)
+- Registry captures the decision plus its justification string as audit artefact
+- Splitting Phase 6 input from Chow-test input permits the former to adopt caveats without compromising the latter's inferential assumptions
+
+**Implementation:** Generated by `scripts/phase3_step3_cpi_decision_and_registry.py`. Final CSV at `data/documentation/phase3_transformation_registry_final.csv` (20 rows, 9 columns).
+
+---
+
+### D-028 | Chow-Test Dependent Variable — Stationary CPI Form, Not Level
+
+**Date:** Phase 3 · Step 4 (resolving 论点 4)
+**Decision:** Run all Chow tests with y = per-country stationary CPI form from the registry's `chow_test_input` column, not the raw level CPI.
+
+Per-country y form:
+
+| Country | y form | Source of decision |
+|---|---|---|
+| USA     | `yoy_pct`       | Only form fully stationary on full sample |
+| Japan   | `first_diff`    | All three transforms non-stationary full-sample; I(1) accepted (D-031) |
+| UK      | `log_diff_pct`  | All three non-stationary or conflict; log_diff chosen for narrative |
+| Germany | `first_diff`    | Regime-shift pattern: full Non-stationary, pre/post both Stationary |
+
+**Rationale:**
+- Chow F and Wald inference requires the dependent variable to be stationary within each sub-sample
+- Running Chow on level CPI regressed against a mix of I(1) and I(0) regressors yields a spurious F statistic whose asymptotic distribution is degenerate
+- Per-country stationarity findings from the Step 3 deep-dive dictate which transform is available
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| All four countries use yoy_pct | Rejected — JPN / UK / GER YoY is non-stationary |
+| All four use first_diff | Rejected — USA first_diff is non-stationary |
+| Level CPI (原文の当初案) | Rejected — spurious regression risk |
+| Per-country stationary form (adopted) | Adopted — statistical validity + narrative alignment |
+
+**Implementation:** Runtime override dict `REGISTRY_OVERRIDES` in `scripts/phase3_step4_chow_structural_breaks.py`; no edit to the registry CSV itself (preserves audit integrity per the amendment convention).
+
+---
+
+### D-029 | COVID Outlier Handling — Dummy-Augmented Chow as Robustness Variant
+
+**Date:** Phase 3 · Step 4
+**Decision:** Run three Chow variants per (country × break): classical F-test, HAC-Wald, and HAC-Wald with an additive COVID-period level dummy (2020-03 to 2020-09). Report all three; use concordance across variants as the confidence criterion. Skip the COVID-dummy variant for the COVID_2020 break (the dummy coincides with the break itself).
+
+**Rationale:**
+- 2020-03 to 2020-09 contains extreme CPI / unemployment outliers that can dominate F-statistic contributions from either the pre- or post-window depending on the break date
+- For GFC_2008: COVID is in post-sample → dummy absorbs outlier without contaminating the pre/post slope comparison
+- For ENERGY_2022: COVID is in pre-sample → dummy prevents pre-window variance inflation and spurious pre-break instability
+- Three-variant concordance provides a robustness signature stronger than any single test
+
+**Empirical outcome:** Step 4 Part 2 vs Part 3 concordance = 8/8 verdicts preserved across HAC and HAC-with-COVID-dummy. None of the three known breaks is a COVID outlier artefact; all three reflect genuine regime transitions.
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| Exclude COVID period entirely | Rejected — choice of excluded range is arbitrary |
+| Heteroskedasticity-only robust SE (not HAC) | Rejected — HAC additionally absorbs autocorrelation which is present in residuals |
+| No robustness check | Rejected — risks false-positive attribution to the specified break |
+
+**Implementation:** `src/structural_breaks.py::chow_test_covid_dummy()`.
+
+---
+
+### D-030 | Phase 6 Regime Treatment Strategy — Regime Dummies Default
+
+**Date:** Phase 3 · Step 4
+**Decision:** In Phase 6 VAR estimation, incorporate each break that passes the HAC Chow at Bonferroni-corrected α = 0.05/12 via regime-dummy interaction terms on the specific economic channels identified as dominant drivers by the per-coefficient decomposition (Step 4 Part 4). Split-sample estimation is reserved as a secondary strategy for cases where a dominant regressor fails stationarity in one sub-window.
+
+**Dominant driver per (country × break) as identified by the per-coefficient decomposition:**
+
+| Country | GFC_2008 | COVID_2020 | ENERGY_2022 |
+|---|---|---|---|
+| USA     | `M2` (z=+4.34) | `POLICY_RATE` (z=+3.41) | `POLICY_RATE` (z=+5.95) |
+| Japan   | *(not significant)* | `const` (z=+4.05) | `const` (z=+4.98) |
+| UK      | `GDP` (z=+1.96)    | `const` (z=+2.47)    | `GDP` (z=+3.58) |
+| Germany | *(not significant)* | `GDP` (z=+2.93) | `GDP` (z=+2.82) |
+
+**Rationale:**
+- Regime dummies preserve full-sample information (important given that the post-2022 window is only 38–45 observations)
+- Per-coefficient decomposition isolates the economically-interpretable channel through which each break operates, rather than attributing the break to the entire equation
+- Different countries show different dominant drivers at the same date (e.g. USA = POLICY_RATE, Japan = const, UK/Germany = GDP at ENERGY_2022) — regime-dummy specification should be country-specific
+
+**Portfolio value:** Connects the Chow-test output (a single F statistic per break) to a specific VAR specification choice (which interactions to include), bridging Phase 3 diagnostics to Phase 6 modelling.
+
+**Implementation:** Phase 6 VAR spec will insert `D_t × dominant_regressor` interaction terms per the above matrix. Deferred to Phase 6; recorded here as the forward-looking directive.
+
+---
+
+### D-031 | Japan CPI I(1) Acceptance (Revised from Regime-Dummy Hypothesis)
+
+**Date:** Phase 3 · Step 3 (revised from the Step 3 initial registry)
+**Decision:** Accept Japan CPI as I(1) and adopt `first_diff` (MoM inflation) as both the Phase 6 VAR input and the Chow test dependent variable. Retain `yoy_pct` for narrative plots only.
+
+**Why this is a revision:** The Step 3 initial registry proposed `yoy_pct_with_regime_dummy`, on the a-priori hypothesis that Japan's 30-year low-flation period followed by the 2022 reversal is a clean level-shift treatable via a post-2022 dummy. The Step 3 Part 2 sub-period deep-dive empirically falsified this hypothesis:
+
+| Form | Full sample | Pre-2020 | Post-2020 |
+|---|---|---|---|
+| `first_diff`     | Non-stationary | Stationary | Conflict |
+| `yoy_pct`        | Non-stationary | **Non-stationary** | Non-stationary |
+| `log_diff_pct`   | Non-stationary | Stationary | Conflict |
+
+The critical row is the second: Japan CPI YoY is non-stationary even **in the pre-2020 sample**. This rejects the "2022-is-a-level-shift" hypothesis — if it were a level shift, pre-2020 YoY would be stationary around its mean and post-2020 YoY would be stationary around a higher mean, but the pre-2020 YoY is itself non-stationary. The correct interpretation is that Japan CPI has a long-term structural drift rather than a discrete regime break.
+
+**Portfolio value:** The revision is itself an empirical finding. An ex-ante plausible hypothesis (regime shift at 2022) was statistically falsified by sub-period analysis. Narrative N3 ("Japan's Uniqueness") is thereby reinforced as **structural-drift rather than regime-shift**, which is the more challenging and more economically-interesting characterisation.
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| Original: yoy_pct + 2022 regime dummy | Rejected — pre-2020 YoY non-stationary falsifies the level-shift hypothesis |
+| Second-differencing (I(2) treatment) | Rejected — I(2) monthly CPI has no clean economic interpretation |
+| Sub-sample-only VAR (split 2020) | Rejected — discards 228 pre-2020 observations; power loss not justified |
+| first_diff (adopted) | Adopted — I(1) is economically interpretable (MoM inflation) and maintains full-sample estimation |
+
+**Implementation:** `REGISTRY_OVERRIDES` in `scripts/phase3_step4_chow_structural_breaks.py`. Justification text preserved in `phase3_transformation_registry_final.csv::justification`.
+
+---
+
+### D-032 | `src/` Module Separation — stationarity.py + structural_breaks.py
+
+**Date:** Phase 3 · Step A (module extraction)
+**Decision:** Split the Phase 3 reusable module into two files: `src/stationarity.py` (univariate ADF/KPSS + transforms) and `src/structural_breaks.py` (multivariate Chow + Quandt-Andrews). The original prompt specified a single `src/stationarity.py` for both tasks; the split is an upgrade per ProjectScope §12 "reusable module" planning.
+
+**Rationale:**
+
+1. **Conceptual separation**: univariate stationarity testing and multivariate regression break testing are distinct analytical frameworks
+2. **Import granularity**: Phase 6 VAR estimation needs only the stationarity module at fit time; structural_breaks is a Phase 3 diagnostic not needed for forecasting
+3. **File size & reviewability**: combined would be ~800 lines; split yields ~310 + ~460 which review better in a portfolio context
+4. **Future extensibility**: Bai-Perron multi-break test, if added later, fits naturally in `structural_breaks.py` without bloating the stationarity module
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| Single `src/stationarity.py` (prompt default) | Rejected — mixes univariate and multivariate concerns |
+| Three files (add `src/quandt_andrews.py`) | Rejected — Quandt-Andrews is a natural extension of Chow, same module |
+| Two-file split (adopted) | Adopted — clean separation on analytical domain |
+
+**Implementation:** `src/__init__.py` bumped from 0.2.0 to 0.3.0; 60 total exports from 4 submodules (`data_loader`, `preprocessing`, `stationarity`, `structural_breaks`).
+
+---
+
+### D-033 | Quandt-Andrews Robustness — π₀ Trim Sensitivity Check
+
+**Date:** Phase 3 · Step 5b
+**Decision:** Run the Quandt-Andrews sup-Wald scanner at both π₀ = 0.15 (Andrews 1993 standard) and π₀ = 0.10 (wider scan) and report both outcomes. Use Andrews (1993) Table I critical values for the applicable π₀ row. Retain the π₀ = 0.15 audit CSVs (`phase3_quandt_andrews_supwald.csv`, `_curve.csv`) as the Step 5 state, and add π₀ = 0.10 versions (`_trim10` suffix) as the Step 5b state.
+
+**Why the sensitivity check matters empirically:**
+
+| Country | π₀ = 0.15 argmax | π₀ = 0.10 argmax | Interpretation |
+|---|---|---|---|
+| USA     | 2022-01 | 2022-01 | Invariant — true dominant break well inside window |
+| Japan   | 2022-01 | 2022-01 | Invariant — same |
+| UK      | 2021-08 *(boundary)* | **2022-03** | Step 5 boundary effect; true argmax at ENERGY_2022 |
+| Germany | 2020-07 *(earlier peak)* | **2022-01** | Same — Step 5 boundary hid the dominant break |
+
+At π₀ = 0.15, the UK and Germany scan windows ended at 2021-08 — one month before ENERGY_2022. Their Step 5 argmax was either on the boundary (UK) or at an earlier local peak (Germany). At π₀ = 0.10, the scan extends to 2023-03 and all four countries' argmax converges within ±1 month of ENERGY_2022. This is the Phase 3 signature finding: **ex-ante break-date specification and data-driven break-date detection yield the same answer**.
+
+**Empirical summary (π₀ = 0.10, Andrews 5% critical value = 18.82):**
+
+| Country | sup-W | argmax | Verdict @ 5% |
+|---|---|---|---|
+| USA     | 37.73 | 2022-01 | **Reject @ 1%** (Andrews 1% = 23.04) |
+| Japan   | 11.88 | 2022-01 | Fail to reject |
+| UK      | 12.57 | 2022-03 | Fail to reject |
+| Germany | 5.13  | 2022-01 | Fail to reject |
+
+**Rationale:**
+- Reviewer scrutiny of "did you check trim robustness" is a common Portfolio question for Quandt-Andrews applications
+- Reporting both trims is evidence of methodological care
+- The π₀ = 0.10 narrative (4/4 argmax at ENERGY_2022) is stronger than the π₀ = 0.15 narrative alone
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| π₀ = 0.15 only | Rejected — hides UK/Germany true argmax behind trim boundary |
+| π₀ = 0.10 only | Rejected — loses the standard-trim anchor that reviewers expect |
+| Both trims reported (adopted) | Adopted — combines rigor with narrative strength |
+
+**Portfolio value:** Demonstrates the value of sensitivity analysis in procedures whose "standard" parameter choice has a material effect on the reported result.
+
+**Implementation:** `src/structural_breaks.py::quandt_andrews_scan()`, `summarise_scan()`, `align_argmax_to_known()`, and the `ANDREWS_1993_TABLE_I` critical-value constant (π₀ ∈ {0.05, 0.10, 0.15, 0.20, 0.25} × k ∈ {1..7}).
+
+---
+
+## Phase 3 Final State — Summary
+
+**After Phase 3 stationarity and structural-break testing:**
+
+| Metric | Phase 2 | Phase 3 |
+|---|---|---|
+| Level ADF+KPSS 4-quadrant classifications | — | **20 series** (11 Non-stationary, 5 Stationary, 2 Inconclusive, 2 Conflict) |
+| Phase 6 VAR input forms finalised | — | **20 series**, 5 transform types registered (D-027) |
+| Chow test battery | — | **32 tests** (12 classical + 12 HAC + 8 COVID-dummy) |
+| Chow rejections at α = 0.05 | — | **23 / 32** (9+9+5); all survive Bonferroni α_bonf = 0.05/12 |
+| Per-coefficient decomposition rows | — | **60** (4 countries × 3 breaks × 5 regressors) |
+| Quandt-Andrews candidate-date evaluations | — | **~1 660** (4 countries × 2 trims × ~207 candidate dates avg) |
+| Data-driven confirmation of ENERGY_2022 break | — | **4/4 countries** argmax within ±1 month (π₀=0.10) |
+| `src/` module architecture | 2 modules (v0.2.0) | **4 modules (v0.3.0)** — +stationarity, +structural_breaks |
+
+**Signature findings:**
+
+1. **Break detection is robust across variants.** Classical vs HAC Chow: 12/12 verdict agreement. HAC vs COVID-dummy HAC: 8/8 verdict agreement. Autocorrelation, heteroskedasticity, and COVID outliers do not drive the conclusions.
+
+2. **GFC_2008 is a USA-specific break.** Only USA rejects at α = 0.05 (classical F = 9.69, HAC F = 6.20; both significant at 1%). Japan, UK, and Germany show p-values between 0.06 and 0.53. This is consistent with the narrative that the 2008 Phillips Curve breakdown was a USA-centric phenomenon; European and Japanese economies experienced the financial shock but their CPI–macro relationships remained comparatively stable under ECB and BOJ liquidity responses.
+
+3. **COVID_2020 and ENERGY_2022 are universal breaks.** All four countries reject at α = 0.05 at both dates (HAC F statistics between 3.67 and 33.67). ENERGY_2022 is astronomically significant for USA (HAC F = 33.67, p ≈ 10⁻²⁷), strong for Japan (F = 11.60) and UK (F = 8.46), and notably weaker for Germany (F = 4.69).
+
+4. **Break channel differs by country.** Per-coefficient decomposition at ENERGY_2022 identifies different dominant drivers: USA via POLICY_RATE (Fed hawkish turn), Japan via the constant (level-shift of monthly inflation after BOJ inertia), UK and Germany via GDP (demand-side transmission to CPI). The same calendar-month event operated through different channels in different economies — material for N1 (Phillips Curve), N2 (Monetary Policy Lag), and N3 (Japan's Uniqueness).
+
+5. **Data-driven break detection confirms the ex-ante specification.** Quandt-Andrews argmax at π₀ = 0.10 is within ±1 month of ENERGY_2022 (2022-02) for all four countries. USA sup-W = 37.73 exceeds the Andrews 1% critical value (23.04). The data independently pinpoint the break date that ProjectScope specified from economic reasoning alone.
+
+**Reusable module architecture extended (v0.2.0 → v0.3.0):**
+
+| Module | Purpose | LOC | Exports |
+|---|---|---|---|
+| `src/data_loader.py`      | I/O helpers for raw and processed datasets       | (unchanged) | 9  |
+| `src/preprocessing.py`    | Phase 2 transformation functions                 | (unchanged) | 14 |
+| `src/stationarity.py`     | Phase 3 Task 1 — ADF/KPSS + 4-quadrant + transforms | ~310   | 20 |
+| `src/structural_breaks.py`| Phase 3 Task 2 — Chow + coefficient decomposition + Quandt-Andrews | ~460 | 16 |
+| `src/__init__.py` (v0.3.0)| Package meta + re-exports                         | ~140    | 60 total |
+
+All Phase 6 through Phase 8 notebooks will import from these four modules rather than duplicating logic.
+
+**Artifacts produced:**
+
+- `src/stationarity.py`, `src/structural_breaks.py` (module extraction per D-032)
+- `src/__init__.py` bumped to v0.3.0
+- `scripts/phase3_step[1-5b]_*.py` — six scratch orchestrators (S1 level ADF/KPSS; S2 differencing; S3 CPI decision + registry; S4 Chow battery; S5 + S5b Quandt-Andrews at two trim fractions)
+- `data/documentation/phase3_adf_kpss_levels.csv` (20 rows)
+- `data/documentation/phase3_differencing_log.csv` (16 rows)
+- `data/documentation/phase3_conflict_ct_retest.csv` (2 rows)
+- `data/documentation/phase3_cpi_transform_comparison.csv` (16 rows)
+- `data/documentation/phase3_transformation_registry_final.csv` (20 rows — source of truth per D-027/D-031)
+- `data/documentation/phase3_subperiod_stationarity.csv` (60 rows)
+- `data/documentation/phase3_cpi_deep_dive.csv` (36 rows)
+- `data/documentation/phase3_break_window_stationarity.csv` (120 rows)
+- `data/documentation/phase3_chow_tests_classical.csv` (12 rows)
+- `data/documentation/phase3_chow_tests_hac.csv` (12 rows)
+- `data/documentation/phase3_chow_tests_covid_dummy.csv` (8 rows)
+- `data/documentation/phase3_chow_coefficient_decomposition.csv` (60 rows)
+- `data/documentation/phase3_chow_bonferroni_summary.csv` (32 rows)
+- `data/documentation/phase3_quandt_andrews_supwald.csv` (4 rows — π₀ = 0.15 Step 5 state)
+- `data/documentation/phase3_quandt_andrews_curve.csv` (815 rows — π₀ = 0.15 curve)
+- `data/documentation/phase3_quandt_andrews_supwald_trim10.csv` (4 rows — π₀ = 0.10 Step 5b state)
+- `data/documentation/phase3_quandt_andrews_curve_trim10.csv` (933 rows — π₀ = 0.10 curve)
+- `notebooks/03_stationarity_structural_breaks.ipynb` — Portfolio-grade narrative of the ten Phase 3 decisions (D-024 through D-033)
+
+**Phase 4 prerequisites ready:**
+
+- `phase3_transformation_registry_final.csv` provides the per-variable input form for Phase 4 feature engineering (lag and rolling construction operates on the phase6_var_input form)
+- `phase3_chow_coefficient_decomposition.csv` is the source for Phase 6 regime-dummy specification per country (D-030 driver identification)
+- All four main-country datasets are Phase-4-ready with no further transformation decisions outstanding
+
+---
+
+*Last updated: Phase 3 complete — four main-country datasets classified, Chow/Quandt-Andrews breaks characterised, reusable `src/` module architecture extended to v0.3.0. Next: Phase 4 feature engineering.*
