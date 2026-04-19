@@ -8,31 +8,35 @@ This package is consumed by:
   - notebooks/01_data_collection.ipynb          (Phase 1 narrative)
   - notebooks/02_cleaning_alignment.ipynb        (Phase 2 narrative)
   - notebooks/03_stationarity_structural_breaks.ipynb  (Phase 3 narrative)
+  - notebooks/04_feature_engineering.ipynb      (Phase 4 narrative)
   - scripts/*.py                                 (CLI orchestrators)
 
 Modules
 -------
-data_loader        I/O helpers for raw and processed datasets.
-preprocessing      Phase 2 transformations (unit/frequency harmonisation,
-                   NaN handling, wide-format assembly, schema generation).
-stationarity       Phase 3 Task 1: ADF + KPSS joint protocol, 4-quadrant
-                   classification, transformation dispatch.
-structural_breaks  Phase 3 Task 2: Chow test (classical / HAC / COVID-dummy),
-                   per-coefficient decomposition, Quandt-Andrews sup-Wald.
+data_loader          I/O helpers for raw and processed datasets.
+preprocessing        Phase 2 transformations (unit/frequency harmonisation,
+                     NaN handling, wide-format assembly, schema generation).
+stationarity         Phase 3 Task 1: ADF + KPSS joint protocol, 4-quadrant
+                     classification, transformation dispatch.
+structural_breaks    Phase 3 Task 2: Chow (classical / HAC / COVID-dummy),
+                     per-coefficient decomposition, Quandt-Andrews sup-Wald.
+feature_engineering  Phase 4: base transform → lags → rolling stats →
+                     regime dummies → wide feature matrix assembly.
 
 Version history
 ---------------
 0.1.0  Initial package scaffolding (Phase 1).
 0.2.0  Added preprocessing module and expanded data_loader (Phase 2).
 0.3.0  Added stationarity and structural_breaks modules (Phase 3).
+0.4.0  Added feature_engineering module (Phase 4).
 """
 from __future__ import annotations
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 
 # ──────────────────────────────────────────────────────────────────
-# Phase 1 / Phase 2 re-exports (existing)
+# Phase 1 / Phase 2 re-exports
 # ──────────────────────────────────────────────────────────────────
 from .data_loader import (       # noqa: F401
     find_project_root,
@@ -64,10 +68,9 @@ from .preprocessing import (     # noqa: F401
 )
 
 # ──────────────────────────────────────────────────────────────────
-# Phase 3 re-exports (new in v0.3.0)
+# Phase 3 re-exports
 # ──────────────────────────────────────────────────────────────────
 from .stationarity import (      # noqa: F401
-    # Constants
     DEFAULT_ALPHA,
     ADF_REGRESSION_LEVEL,
     TRANSFORM_FN,
@@ -76,14 +79,12 @@ from .stationarity import (      # noqa: F401
     CONFLICT_CLASS,
     SMALL_SAMPLE_WARN,
     SMALL_SAMPLE_HARD,
-    # Transforms
     first_difference,
     second_difference,
     yoy_pct,
     log_first_diff_pct,
     apply_transform,
     strip_suffix,
-    # Testing
     schwert_maxlag,
     run_adf,
     run_kpss,
@@ -93,34 +94,52 @@ from .stationarity import (      # noqa: F401
 )
 
 from .structural_breaks import (  # noqa: F401
-    # Constants
     DEFAULT_HAC_LAG,
     KNOWN_BREAKS,
     COVID_DUMMY_START,
     COVID_DUMMY_END,
     COVID_DUMMY_BREAKS,
     ANDREWS_1993_TABLE_I,
-    # Dummies
     make_split_dummy,
     make_covid_dummy,
-    # Chow tests
     chow_test_classical,
     chow_test_hac,
     chow_test_covid_dummy,
-    # Decomposition
     coefficient_decomposition,
-    # Quandt-Andrews
     wald_at_break,
     quandt_andrews_scan,
     summarise_scan,
     align_argmax_to_known,
 )
 
+# ──────────────────────────────────────────────────────────────────
+# Phase 4 re-exports (new in v0.4.0)
+# ──────────────────────────────────────────────────────────────────
+from .feature_engineering import (  # noqa: F401
+    REGISTRY_OVERRIDES,
+    LAG_PERIODS,
+    ROLLING_WINDOWS,
+    ROLLING_STATS,
+    PERIOD_WINDOWS,
+    PHASE6_REGIME_SPEC,
+    load_effective_registry,
+    transform_country,
+    build_lag_matrix,
+    build_rolling_matrix,
+    build_split_dummies,
+    build_period_dummies,
+    build_interactions,
+    build_regime_matrix,
+    build_country_features,
+    build_all_features,
+    write_features_schema_md,
+)
+
 
 __all__ = [
     # Package meta
     "__version__",
-    # Data access (data_loader)
+    # Data access
     "find_project_root",
     "MAIN_COUNTRIES",
     "SUPPLEMENTARY_COUNTRIES",
@@ -130,7 +149,7 @@ __all__ = [
     "load_processed_main",
     "load_processed_all_main",
     "load_processed_china",
-    # Phase 2 (preprocessing)
+    # Phase 2 preprocessing
     "m2_to_yoy",
     "gdp_quarterly_to_monthly_yoy",
     "normalise_monthly_index",
@@ -183,4 +202,22 @@ __all__ = [
     "quandt_andrews_scan",
     "summarise_scan",
     "align_argmax_to_known",
+    # Phase 4 feature engineering
+    "REGISTRY_OVERRIDES",
+    "LAG_PERIODS",
+    "ROLLING_WINDOWS",
+    "ROLLING_STATS",
+    "PERIOD_WINDOWS",
+    "PHASE6_REGIME_SPEC",
+    "load_effective_registry",
+    "transform_country",
+    "build_lag_matrix",
+    "build_rolling_matrix",
+    "build_split_dummies",
+    "build_period_dummies",
+    "build_interactions",
+    "build_regime_matrix",
+    "build_country_features",
+    "build_all_features",
+    "write_features_schema_md",
 ]
