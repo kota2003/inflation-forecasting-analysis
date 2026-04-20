@@ -26,6 +26,18 @@ Cholesky ordering (D-054 candidate — same as S4)
 ------------------------------------------------
     [GDP, UNEMPLOYMENT, CPI, POLICY_RATE, M2]
 
+FEVD computation methodology (revised)
+--------------------------------------
+Initial implementation used ``IRAnalysis.fevd(periods).decomp`` but
+the installed statsmodels version was observed to silently truncate
+the horizon axis to 5 when the VAR includes exogenous regressors,
+discarding horizons 5..24. The revised implementation reconstructs
+FEVD from ``results.irf(horizon).orth_irfs`` via the textbook
+formula (cumulative squared orthogonalized IRFs normalized by
+total variance), which is mathematically equivalent and delivers
+the full horizon. Validation: IRF in S4 produced 25 horizons
+correctly, so the IRF-based input path is reliable.
+
 FEVD semantics
 --------------
 Let `decomp[h, i, j]` = fraction of variable i's forecast error
@@ -182,16 +194,54 @@ def fit_var(endog, exog, p, trend):
 # ── FEVD extraction ──────────────────────────────────────────────────
 
 def compute_fevd(results, horizon: int) -> np.ndarray:
-    """Return FEVD decomposition array of shape (horizon+1, n, n).
+    """Compute orthogonalized FEVD manually from the IRF.
 
-    decomp[h, i, j] = share of variable i's forecast error variance
-    at horizon h explained by shocks to variable j.
-    Rows (axis 1) sum to 1 along axis 2 for every (h, i).
+    Bypasses ``IRAnalysis.fevd().decomp`` which was observed to
+    silently truncate the horizon axis to 5 in the installed
+    statsmodels version when VARs include exogenous regressors.
+    The manual computation uses ``results.irf(horizon).orth_irfs``
+    which is mathematically equivalent and confirmed to deliver
+    the full requested horizon (S4 produced 25 horizons correctly).
+
+    Definition
+    ----------
+    Let θ_{k,i,j} denote the orthogonalized IRF of variable i to
+    a unit shock in variable j at lag k.  Then:
+
+        FEVD[h, i, j] = (Σ_{k=0..h} θ²_{k,i,j}) / (Σ_{j'} Σ_{k=0..h} θ²_{k,i,j'})
+
+    By construction, Σ_j FEVD[h, i, j] = 1 for every (h, i).
+
+    Parameters
+    ----------
+    results  : VARResults instance
+    horizon  : int, maximum horizon (output has horizon+1 slices, 0..horizon)
+
+    Returns
+    -------
+    decomp   : np.ndarray of shape (horizon+1, n, n)
     """
-    fevd_obj = results.fevd(periods=horizon + 1)
-    # fevd_obj.decomp is the orthogonalized variance decomposition.
-    # Shape: (periods, neqs, neqs)
-    decomp = np.asarray(fevd_obj.decomp)
+    irf_obj = results.irf(horizon)
+    orth = np.asarray(irf_obj.orth_irfs)   # shape (horizon+1, n, n)
+    expected_shape = horizon + 1
+    if orth.shape[0] < expected_shape:
+        raise RuntimeError(
+            f"orth_irfs returned shape[0] = {orth.shape[0]} "
+            f"but requested horizon+1 = {expected_shape}. "
+            f"IRF computation is also truncated in this environment; "
+            f"FEVD fix cannot proceed."
+        )
+
+    sq = orth ** 2                          # (H+1, n, n)
+    cumsq = np.cumsum(sq, axis=0)           # (H+1, n, n) — numerator
+    mse = cumsq.sum(axis=2, keepdims=True)  # (H+1, n, 1) — denominator
+
+    # Guard against divide-by-zero at h=0 for variables whose
+    # contemporaneous shock is zero (should not occur in a
+    # well-specified Cholesky VAR but defensive programming).
+    with np.errstate(divide='ignore', invalid='ignore'):
+        decomp = np.where(mse > 0, cumsq / mse, 0.0)
+
     return decomp
 
 

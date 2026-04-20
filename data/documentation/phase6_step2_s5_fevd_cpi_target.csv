@@ -1,0 +1,41 @@
+country,horizon,shock,share,narrative_label
+GERMANY,1,CPI,0.009535668350613846,Self-share (auto-explanatory)
+GERMANY,1,GDP,0.04041427790183385,Demand-side inflation
+GERMANY,1,M2,0.00031391591655899554,N2 · Quantity Theory of Money
+GERMANY,1,POLICY_RATE,0.02294398106517838,N2 · Monetary Policy Lag (direct channel)
+GERMANY,1,UNEMPLOYMENT,0.926792156765815,N1 · Phillips Curve
+GERMANY,3,CPI,0.04822877136975894,Self-share (auto-explanatory)
+GERMANY,3,GDP,0.09934290843590057,Demand-side inflation
+GERMANY,3,M2,0.0028766328929472366,N2 · Quantity Theory of Money
+GERMANY,3,POLICY_RATE,0.8413739853404452,N2 · Monetary Policy Lag (direct channel)
+GERMANY,3,UNEMPLOYMENT,0.008177701960948051,N1 · Phillips Curve
+JAPAN,1,CPI,0.00040797885854163587,Self-share (auto-explanatory)
+JAPAN,1,GDP,0.02379828849266073,Demand-side inflation
+JAPAN,1,M2,0.0020754749234325456,N2 · Quantity Theory of Money
+JAPAN,1,POLICY_RATE,0.006894801997571734,N2 · Monetary Policy Lag (direct channel)
+JAPAN,1,UNEMPLOYMENT,0.9668234557277934,N1 · Phillips Curve
+JAPAN,3,CPI,0.006580508536025673,Self-share (auto-explanatory)
+JAPAN,3,GDP,0.004826958259602332,Demand-side inflation
+JAPAN,3,M2,0.010438803131592959,N2 · Quantity Theory of Money
+JAPAN,3,POLICY_RATE,0.9543437708351239,N2 · Monetary Policy Lag (direct channel)
+JAPAN,3,UNEMPLOYMENT,0.02380995923765522,N1 · Phillips Curve
+UK,1,CPI,0.010199244009135525,Self-share (auto-explanatory)
+UK,1,GDP,0.0025887525966550346,Demand-side inflation
+UK,1,M2,0.018106206733624845,N2 · Quantity Theory of Money
+UK,1,POLICY_RATE,0.012529515279241154,N2 · Monetary Policy Lag (direct channel)
+UK,1,UNEMPLOYMENT,0.9565762813813431,N1 · Phillips Curve
+UK,3,CPI,0.016780725893229074,Self-share (auto-explanatory)
+UK,3,GDP,0.013777350458323005,Demand-side inflation
+UK,3,M2,0.015479718929805408,N2 · Quantity Theory of Money
+UK,3,POLICY_RATE,0.9330543941434496,N2 · Monetary Policy Lag (direct channel)
+UK,3,UNEMPLOYMENT,0.02090781057519309,N1 · Phillips Curve
+USA,1,CPI,0.0017100529251564728,Self-share (auto-explanatory)
+USA,1,GDP,0.1143156577988967,Demand-side inflation
+USA,1,M2,0.003936417528254476,N2 · Quantity Theory of Money
+USA,1,POLICY_RATE,0.12936012715844844,N2 · Monetary Policy Lag (direct channel)
+USA,1,UNEMPLOYMENT,0.7506777445892437,N1 · Phillips Curve
+USA,3,CPI,0.00252355838649258,Self-share (auto-explanatory)
+USA,3,GDP,0.009451323196507983,Demand-side inflation
+USA,3,M2,0.004443389341267416,N2 · Quantity Theory of Money
+USA,3,POLICY_RATE,0.8724851999170723,N2 · Monetary Policy Lag (direct channel)
+USA,3,UNEMPLOYMENT,0.11109652915865974,N1 · Phillips Curve
