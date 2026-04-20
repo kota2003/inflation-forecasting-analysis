@@ -1301,3 +1301,270 @@ All Phase 6 through Phase 8 notebooks will import from these four modules rather
 ---
 
 *Last updated: Phase 4 complete — per-country feature matrices of 50–53 columns built, reusable `src/` module architecture extended to v0.4.0 with 5 modules and 77 total exports. Next: Phase 5 exploratory data analysis.*
+
+## Phase 5 Decisions
+
+*These decisions concern the exploratory data analysis phase — cross-country CPI visualisation, correlation structure, Phillips Curve N1 deep-dive, and ACF/PACF diagnostics for Phase 6 ARIMA order identification. They are implemented in `scripts/phase5_step{1..4}_*.py` and narrated in `notebooks/05_eda.ipynb`.*
+
+---
+
+### D-041 | Cross-Country CPI Normalisation — Dual-Panel View
+
+**Date:** Phase 5 · Step 1
+**Decision:** Visualise cross-country CPI dynamics via a dual-panel figure:
+
+- **Panel A** — CPI levels normalised to 100 at 2001-01 (cumulative price level; shows 25-year divergence).
+- **Panel B** — CPI YoY % computed from levels as `(lvl / lvl.shift(12) − 1) × 100`, directly overlaid across the four countries.
+
+**Rationale:**
+
+1. **Single-panel options fail asymmetrically.** Level-overlay alone obscures rate dynamics; YoY-overlay alone collapses the cumulative divergence which is the single strongest N3 visualisation (USA 184.9 vs JPN 116.2 at 2025-10).
+2. **Both dimensions are portfolio-worthy.** Reviewers interpret cumulative inflation as "where prices are now" and YoY as "where inflation is going"; omitting either loses half the story.
+3. **Choice of T0 = 2001-01.** Matches the Phase 2 effective start date (D-023); no ad-hoc anchor.
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| YoY-only overlay | Rejected — flattens the N3 cumulative divergence |
+| Index-only | Rejected — hides 2022+ rate dynamics relevant to N2 |
+| Z-score normalisation | Rejected — non-interpretable units for portfolio audience |
+
+**Implementation:** `scripts/phase5_step1_cpi_narrative.py` produces Fig 1. Terminal annotations rendered at 1-decimal precision with per-country vertical offset (dict-driven) to prevent near-coincident labels (USA 184.9, UK 185.2) from overprinting. Audit: `phase5_step1_cpi_summary.csv` (4 rows).
+
+---
+
+### D-042 | Correlation Heatmap Scope — Two-Tier (Base + Cross-Lag)
+
+**Date:** Phase 5 · Step 2
+**Decision:** Phase 5 correlation structure is visualised via two complementary tiers:
+
+- **Tier 1** (Fig 4): Per-country base 5×5 Pearson matrix on the D-031-corrected stationary feature form, 2×2 country grid.
+- **Tier 2** (Fig 5): Per-country 4×5 cross-lag Pearson matrix — `corr(CPI_t, X_{t−k})` for X ∈ {POLICY_RATE, UNEMPLOYMENT, GDP, M2} and k ∈ {0, 1, 3, 6, 12}, 2×2 country grid.
+
+**Rationale:**
+
+1. **Base 5×5 alone is insufficient.** Cross-lag dimension is required to preview N2 Monetary Policy Lag; pure contemporaneous correlation structure misses the entire temporal dimension of central bank transmission.
+2. **Full 50×50 dendrogram (Option C) is over-scope.** Phase 5 EDA does not require feature selection — that is D-040, deferred to Phase 6 Ridge. A 50×50 heatmap is unreadable at portfolio scale.
+3. **CPI as Tier-2 anchor.** CPI is the Phase 6 target; orienting the cross-lag matrix around CPI maximises narrative alignment and prevents a 5×5×5 over-specification.
+4. **Stationary form preserves Phase 6 semantics.** Using D-031 corrected forms means the correlations Phase 5 reveals are directly comparable to Phase 6 VAR coefficients.
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| Base 5×5 only | Rejected — no N2 preview |
+| Full 50×50 dendrogram | Rejected — over-scope; unreadable |
+| Base + lag CPI only (4×5 single tier) | Rejected — loses contemporaneous co-movement |
+| Cross-country 5×5 | Rejected — CPI forms differ per D-031; Pearson not clean |
+
+**Key observation:** USA `corr(CPI, M2_{t−12}) = +0.41` shows a sign-flip pattern across lags (k=0: −0.17 → k=12: +0.41), consistent with Quantity Theory "money growth leads inflation by ≈12 months". Phase 6 VAR IRF will provide the directional / causal interpretation.
+
+**Implementation:** `scripts/phase5_step2_correlation_structure.py`. Audit: `phase5_step2_base_correlation.csv` (100 rows), `phase5_step2_lag_correlation.csv` (80 rows), `phase5_step2_window_summary.csv` (4 rows).
+
+---
+
+### D-043 | Phillips Curve Fitting — Pre/Post-GFC Split + 60-Month Rolling
+
+**Date:** Phase 5 · Step 3
+**Decision:** N1 Phillips Curve analysis employs two complementary specifications:
+
+- **Fig 6** — Per-country scatter (4 panels) with separate OLS fits for the pre-GFC (2002-01..2008-08) and post-GFC (2008-09..end-of-data) sub-periods. Variables are **level-based**: UNEMPLOYMENT (%) from Phase 2 and CPI YoY % computed from CPI levels.
+- **Fig 7** — Dual-panel 4-country overlay: (A) 60-month rolling OLS slope β; (B) 60-month rolling R². Right-aligned, strict `min_periods = 60`.
+
+**Rationale:**
+
+1. **Level-based form is the correct EDA lens.** S2 showed stationary-form cross-lag Phillips correlations are essentially zero across all 4 countries (|r| ≤ 0.07). The classical Phillips Curve is a *level* relationship; stationary-form analysis de-trends away the exact relationship being studied. See D-046 for the formal methodological finding.
+2. **Split-sample complies with §9 literal specification.** ProjectScope §9 explicitly specifies "pre/post break split"; 2008-09 aligns with `KNOWN_BREAKS['GFC_2008']`.
+3. **Rolling captures time-variation static split cannot.** The binary pre/post partition masks within-period evolution — e.g. UK's sign flip from pre-GFC β = +1.68 to post-GFC β = −0.27 is missed under a single rolling or a single static fit alone.
+4. **60-month window balances smoothness and local sensitivity.** Shorter (12–24 m) yields high variance; longer (120 m+) smooths out the regime transitions of analytical interest.
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| Static OLS only (single fit) | Rejected — no time-variation; misses UK sign flip |
+| Pre/post split only | Rejected — §9 compliant but loses continuous evolution |
+| Rolling only | Rejected — loses discrete GFC-break reference |
+
+**Key findings (per-country pre→post |β| transition):**
+
+| Country | \|β\| pre-GFC | \|β\| post-GFC | Verdict |
+|---|---:|---:|---|
+| USA     | 0.567 | 0.372 | Classical flattening (−34 %) |
+| JAPAN   | 0.710 | 0.947 | Steepening (+33 %) — reinforces N3 |
+| UK      | 1.676 | 0.271 | Sign-flip regime breakdown (+1.68 → −0.27) |
+| GERMANY | 0.321 | 0.603 | Steepening (+88 %) — ECB-constrained regime |
+
+Rolling slopes re-emerge at |β| ≈ 5–9 across all four countries post-2022, with rolling R² ≈ 0.6–0.75 — Phillips is **shock-activated**, not "dead".
+
+**Implementation:** `scripts/phase5_step3_phillips_curve.py` using `statsmodels.OLS` for coefficients, SE, R², p-values. Audit: `phase5_step3_phillips_fit.csv` (12 rows: 4 × {full, pre, post}), `phase5_step3_rolling_slope.csv` (894 rows).
+
+---
+
+### D-044 | ACF/PACF Lag Depth — 40 Uniform, Ljung-Box {12, 24, 36}
+
+**Date:** Phase 5 · Step 4
+**Decision:** ACF/PACF diagnostic uses a uniform lag depth of 40 across all four countries. Ljung-Box Q statistics are reported at lags {12, 24, 36} (annual, biannual, triennial horizons). Confidence band is simple Bartlett `±1.96/√n` (constant across lags). PACF method is `'ywm'` (Yule-Walker adjusted).
+
+**Rationale:**
+
+1. **Three-cycle seasonal coverage.** 40 > 3 × 12 permits three full annual harmonics to be inspected, sufficient to distinguish transient seasonal noise from persistent 12-month structure.
+2. **Covers Phase 3 post-break windows.** ENERGY 2022 post-break windows are 38–45 obs per country; 40-lag depth ensures ACF/PACF features attributable to the post-break regime are not missed by a shorter specification.
+3. **Symmetric specification.** Uniform lag depth across countries avoids asymmetric defensibility claims of the form "why lag 30 for USA but 50 for Japan?".
+4. **Ljung-Box at three horizons.** A single-lag Q depends heavily on the choice; reporting at {12, 24, 36} provides a robustness envelope matching the seasonal harmonic spacing.
+5. **Constant Bartlett CI.** MA-adjusted (non-constant-per-lag) CI is more mathematically precise but visually confusing; the textbook Bartlett band is reviewer-transparent.
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| 24-lag (two seasonal cycles) | Rejected — insufficient post-ENERGY window coverage |
+| 60-lag | Rejected — diminishing returns; three cycles already diagnostic |
+| Country-specific depth | Rejected — asymmetric defensibility |
+| MA-adjusted non-constant CI | Rejected — constant Bartlett is textbook-standard |
+
+**Key findings:**
+
+| Country | ACF[12] | PACF[12] | Bartlett CI | Ljung-Box Q(12) | p(12) |
+|---|---:|---:|---:|---:|---:|
+| USA     | +0.268 | +0.154 | ±0.116 | 1 527.22 | < 0.001 |
+| JAPAN   | +0.354 | +0.308 | ±0.114 |    67.30 | < 0.001 |
+| UK      | +0.561 | +0.445 | ±0.115 |   190.46 | < 0.001 |
+| GERMANY | +0.472 | +0.419 | ±0.115 |   104.33 | < 0.001 |
+
+- Seasonal lag-12 ACF significant in all 4 countries → **SARIMA with s=12 justified universally** (not just Phase 6 ARIMA).
+- Ljung-Box Q(12) rejects white noise at p < 0.001 for all 4 countries → ARIMA/SARIMA modelling is statistically required for Phase 6.
+- USA shows slow-decay ACF (0.95 → 0.89 → 0.78 → ...), an artifact of `yoy_pct` 12-month overlap; this is a D-031 trade-off to be evaluated in Phase 6 ARIMA estimation.
+- Preliminary ARMA order candidates (AIC/BIC in Phase 6 supersedes): USA AR(3), Japan ARMA(1,2), UK AR(2), Germany ARMA(2,2).
+
+**Implementation:** `scripts/phase5_step4_acf_pacf.py` using `statsmodels.tsa.stattools.acf`, `pacf`, `statsmodels.stats.diagnostic.acorr_ljungbox`. Audit: `phase5_step4_acf_pacf_values.csv` (164 rows), `phase5_step4_ljung_box.csv` (12 rows).
+
+---
+
+### D-045 | Japan Phase Decomposition — Four-Phase Labelling
+
+**Date:** Phase 5 · Step 1
+**Decision:** Japan CPI history is labelled in four phases for the N3 narrative:
+
+- **Bubble aftermath** (≤ 1998-12) — documented but pre-dates Phase 2 data
+- **Deflation era** (1999-01..2012-12)
+- **Abenomics** (2013-04..2022-01) — start aligned with BOJ QQE announcement
+- **Reversal** (2022-02 onwards)
+
+Fig 2 shades only the three phases within the data range; Bubble aftermath is recorded for completeness.
+
+**Rationale:**
+
+1. **ProjectScope §4 externally defined.** The N3 narrative in §4 explicitly references Abenomics as a "natural experiment" and 2022 reversal driven by yen depreciation + energy costs. Phase boundaries are externally motivated, not data-mined ex post.
+2. **Data-driven validation.** Phase mean YoY are monotonically increasing: Deflation era −0.20 % → Abenomics +0.64 % → Reversal +2.99 %. The Reversal phase shows exactly 0 deflation months (of 45), a clean post-break separation.
+3. **Phase boundary 2013-04.** The BOJ announced Quantitative and Qualitative Monetary Easing (QQE) on 2013-04-04; this is the operational start of Abenomics monetary policy, not the Abe administration inauguration (2012-12).
+4. **Single-period shading insufficient.** A single 1999–2012 deflation block discards the Abenomics / Reversal distinction that is the most portfolio-valuable component of N3.
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| Single 1999–2012 shaded region | Rejected — loses Abenomics distinction |
+| Data-driven (YoY < 0 months hatching) | Rejected — no external interpretability |
+| 3-phase (omit Bubble aftermath) | Rejected — decision log should document full structure |
+
+**Implementation:** `scripts/phase5_step1_cpi_narrative.py`, constant `JAPAN_PHASES_VISIBLE`. Audit: `phase5_step1_japan_phases.csv` (3 rows, visible phases only).
+
+---
+
+### D-046 | Level-vs-Stationary Phillips Visibility Asymmetry — Methodology Finding
+
+**Date:** Phase 5 · Step 3 (emerged from Step 2 vs Step 3 comparison)
+**Decision:** Formally record that the visibility of the N1 Phillips Curve relationship is strongly dependent on the variable transformation used, and that this asymmetry is a *finding to report*, not a flaw to hide.
+
+**Empirical observation:**
+
+| Lens | USA corr/β | USA R² | JAPAN corr/β | JAPAN R² |
+|---|---:|---:|---:|---:|
+| S2 stationary form (D-031 corrected, `corr(CPI, UNEMP)`)     | −0.062 | ~ 0  | −0.071 | ~ 0  |
+| S3 level form (full-sample OLS, CPI YoY on UNEMP %)          | −0.383 | 0.18 | −0.865 | 0.38 |
+
+The stationary form essentially erases the Phillips relationship; the level form shows it clearly.  This is **not a numerical artifact**: the Phillips Curve is theoretically a *level* relationship (inflation rate vs unemployment rate) rather than a rate-of-change relationship. First-differencing or log-differencing strips the co-movement between the levels.
+
+**Implications for methodology:**
+
+1. **Phase 5 EDA uses both lenses intentionally.** S2 stationary-form heatmaps and S3 level-form Phillips scatter are complementary, not redundant. Each answers a different economic question.
+2. **D-031 trade-off is explicit.** The stationary form is correct for VAR estimation (Phase 6 main model) because VAR requires stationary inputs. The level form is correct for Phillips visualisation. Both are needed.
+3. **Phase 6 should report both.** Phase 6 VAR output (Granger causality, IRF) is derived from the stationary form; these will be cross-referenced against Fig 6 (level scatter) to verify directional consistency.
+4. **Portfolio defensibility.** This asymmetry is a *finding* to present, not a flaw to hide. Demonstrating that variable form matters — and choosing the right form for the right question — is the sign of a careful analyst.
+
+**Rationale for formal recording:**
+
+- Connects two apparently contradictory result sets (S2 and S3) into a single coherent methodological statement.
+- Prevents downstream Phase 6 / Phase 8 misinterpretation ("why did earlier analysis show no Phillips?").
+- Serves as the portfolio explanation for the reviewer question *"why did S2 show no Phillips but S3 did?"*.
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| Silent — report S3 without referencing S2 | Rejected — selective narrative; hides honest uncertainty |
+| Treat S2 as the "true" answer | Rejected — economically incorrect; Phillips is a level relationship |
+| Treat S3 as the "true" answer | Rejected — Phase 6 VAR legitimately requires stationarity |
+| Record the asymmetry explicitly *(adopted)* | Adopted — portfolio-worthy methodology transparency |
+
+**Implementation:** No code artifact — this is a methodological finding. Decision recorded in `ProjectDriven.md`; referenced by `notebooks/05_eda.ipynb` narrative at the S2-to-S3 transition section.
+
+---
+
+### D-047 | EDA Output Format — Notebook + Audit CSVs; No `src/eda.py`
+
+**Date:** Phase 5 · Step 5
+**Decision:** Phase 5 produces:
+
+- `notebooks/05_eda.ipynb` — Portfolio-grade narrative assembly of S1..S4 (8 figures + interleaved commentary)
+- `outputs/figures/phase5_step{1..4}_fig{1..8}*.png` — 8 figures total
+- `data/documentation/phase5_step{1..4}_*.csv` — 12 audit CSVs
+
+Phase 5 does **not** introduce a new `src/eda.py` module. The `src/__init__.py` version remains at v0.4.0.
+
+**Rationale:**
+
+1. **Plot code is not reusable in the way feature engineering is.** `src/feature_engineering.py` (Phase 4) is consumed by Phase 6 VAR / Ridge estimation; Phase 5 plotting code is consumed only by Phase 5 itself. The modularisation cost does not justify the reuse benefit.
+2. **Scratch scripts are the canonical implementation.** The four Phase 5 scratch scripts in `scripts/phase5_step{1..4}_*.py` are preserved and cited by the notebook.
+3. **Asymmetry with Phase 3/4 is intentional.** Phase 3 introduced `src/stationarity.py` and `src/structural_breaks.py` because downstream phases consume those tests. Phase 4 introduced `src/feature_engineering.py` because Phase 6 consumes it. Phase 5 is consumption-terminal — no phase consumes EDA plotting code.
+4. **v0.5.0 is reserved for Phase 6 modelling modules.** The next `__init__.py` version bump will accompany Phase 6 ARIMA / VAR / Ridge code.
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| `src/eda.py` with plot helpers | Rejected — no downstream consumer |
+| `src/plotting.py` shared module | Rejected — 8 figures too heterogeneous to abstract usefully |
+| Duplicate logic in scratch + notebook | Rejected — anti-pattern; notebook imports from scratch |
+
+**Implementation:** Notebook imports from `src` (unchanged v0.4.0 API) and directly executes the existing scratch-script logic via path injection. `ProjectDriven.md` version bump reserved for Phase 6.
+
+---
+
+## Phase 5 Final State — Summary
+
+**After Phase 5 exploratory data analysis:**
+
+| Metric | Phase 4 | Phase 5 |
+|---|---|---|
+| Decision-log entries | 40 | **47** (+7) |
+| Portfolio figures | 6 (Phase 4) | **+8** (Fig 1–8) |
+| Audit CSV rows | 26 (Phase 4 summaries) | **+12 CSVs** (~1 300 rows total for Phase 5) |
+| `src/` module version | v0.4.0 | **v0.4.0** (unchanged per D-047) |
+| Narrative notebooks | `03` + `04` | **+ `05_eda.ipynb`** |
+
+**Signature findings (seven items):**
+
+1. **Japan peer-gap** — Japan CPI YoY is below the mean of USA/UK/Germany in 253 of 279 monthly observations (90.7 %); `mean_gap = −1.80 pp`. Single-number evidence of N3 structural uniqueness.
+2. **Japan phase monotone** — Deflation era −0.20 % → Abenomics +0.64 % → Reversal +2.99 %, with Reversal-phase deflation months = 0 of 45. Externally-specified D-045 phases confirmed data-driven.
+3. **USA M2 sign-flip at k=12** — `corr(CPI, M2_{t−12}) = +0.41` vs k=0 value −0.17. Direct numerical echo of the Quantity Theory of Money; preview of N2 Monetary Policy Lag.
+4. **UK sign-flip regime breakdown** — Phillips β = +1.68 (pre-GFC) → −0.27 (post-GFC), with pre-GFC R² = 0.48. The only country showing a full-sign regime transition.
+5. **Phillips shock-activation** — post-2022 rolling slopes reach |β| ≈ 5–9 across all four countries, with rolling R² ≈ 0.6–0.75. Phillips is shock-activated, not dead.
+6. **SARIMA universally justified** — ACF[12] significant in all four countries (USA 0.27, JPN 0.35, UK 0.56, GER 0.47); Ljung-Box Q(12) rejects at p < 0.001.
+7. **D-046 methodology finding** — level-vs-stationary Phillips visibility asymmetry formally recorded as a portfolio-defensibility methodology contribution.
+
+---
+
+*Last updated: Phase 5 complete — 4-panel EDA narrative (D-041..D-047, 7 decisions) and 7 signature findings. Next: Phase 6 — ARIMA, VAR with Granger/IRF, and Ridge estimation on the Phase 4 feature matrices.*

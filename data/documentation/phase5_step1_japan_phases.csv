@@ -1,0 +1,4 @@
+phase,start,end,n_months,yoy_mean,yoy_std,yoy_min,yoy_max,deflation_months,above_2pct_months
+Deflation era,1999-01,2012-12,132,-0.1964,0.8046,-2.5589,2.3085,84,3
+Abenomics,2013-04,2022-01,106,0.642,1.0329,-1.194,3.6998,21,12
+Reversal,2022-02,2030-12,45,2.9937,0.66,0.9018,4.3868,0,43

@@ -1,0 +1,2 @@
+series,n,window_start,window_end,gap_mean,gap_std,gap_min,gap_min_date,gap_max,gap_max_date,months_below_zero,months_above_zero,note
+JAPAN_minus_3peer_avg_yoy,279,2002-01,2025-03,-1.7947,1.4769,-5.6813,2022-03,2.4106,2015-01,253,26,all-peers-valid intersection; ends at UK/GER data end 2025-03
