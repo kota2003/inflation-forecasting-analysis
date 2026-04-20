@@ -9,6 +9,7 @@ This package is consumed by:
   - notebooks/02_cleaning_alignment.ipynb        (Phase 2 narrative)
   - notebooks/03_stationarity_structural_breaks.ipynb  (Phase 3 narrative)
   - notebooks/04_feature_engineering.ipynb      (Phase 4 narrative)
+  - notebooks/07_var_model.ipynb                 (Phase 6 Step 2 narrative)
   - scripts/*.py                                 (CLI orchestrators)
 
 Modules
@@ -22,6 +23,11 @@ structural_breaks    Phase 3 Task 2: Chow (classical / HAC / COVID-dummy),
                      per-coefficient decomposition, Quandt-Andrews sup-Wald.
 feature_engineering  Phase 4: base transform → lags → rolling stats →
                      regime dummies → wide feature matrix assembly.
+modelling_utils      Phase 6 shared utilities — Cholesky ordering, D-050
+                     AIC / BIC lag orders, D-030 exog assembly helpers.
+                     Narrow scope per D-063: pure utilities and constants
+                     only; model-fitting logic remains in scratch scripts
+                     pending Step 3 assessment.
 
 Version history
 ---------------
@@ -29,10 +35,13 @@ Version history
 0.2.0  Added preprocessing module and expanded data_loader (Phase 2).
 0.3.0  Added stationarity and structural_breaks modules (Phase 3).
 0.4.0  Added feature_engineering module (Phase 4).
+0.4.1  Added modelling_utils module (Phase 6 Step 2 closeout; D-063).
+       Patch bump — no API change to existing modules; promotes helpers
+       duplicated 4+ times across nine Step 2 scratch scripts.
 """
 from __future__ import annotations
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -113,7 +122,7 @@ from .structural_breaks import (  # noqa: F401
 )
 
 # ──────────────────────────────────────────────────────────────────
-# Phase 4 re-exports (new in v0.4.0)
+# Phase 4 re-exports (v0.4.0)
 # ──────────────────────────────────────────────────────────────────
 from .feature_engineering import (  # noqa: F401
     REGISTRY_OVERRIDES,
@@ -133,6 +142,19 @@ from .feature_engineering import (  # noqa: F401
     build_country_features,
     build_all_features,
     write_features_schema_md,
+)
+
+# ──────────────────────────────────────────────────────────────────
+# Phase 6 modelling utilities re-exports (new in v0.4.1 · D-063)
+# ──────────────────────────────────────────────────────────────────
+from .modelling_utils import (  # noqa: F401
+    P_PER_COUNTRY_AIC,
+    P_PER_COUNTRY_BIC,
+    CHOLESKY_ORDER,
+    SPLIT_BREAK_NAMES,
+    PERIOD_KEYS,
+    build_regime_exog_columns,
+    extract_endog_exog_cholesky,
 )
 
 
@@ -220,4 +242,12 @@ __all__ = [
     "build_country_features",
     "build_all_features",
     "write_features_schema_md",
+    # Phase 6 modelling utilities (new in v0.4.1 · D-063)
+    "P_PER_COUNTRY_AIC",
+    "P_PER_COUNTRY_BIC",
+    "CHOLESKY_ORDER",
+    "SPLIT_BREAK_NAMES",
+    "PERIOD_KEYS",
+    "build_regime_exog_columns",
+    "extract_endog_exog_cholesky",
 ]
