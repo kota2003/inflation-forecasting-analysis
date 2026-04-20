@@ -1,0 +1,5 @@
+country,p_star,n_tests_total,n_tests_nontrivial,n_sig_5pct,n_sig_1pct,pct_sig_5pct,pct_sig_1pct
+USA,12,25,20,13,6,65.0,30.0
+JAPAN,5,25,20,3,3,15.0,15.0
+UK,12,25,20,3,2,15.0,10.0
+GERMANY,12,25,20,3,1,15.0,5.0

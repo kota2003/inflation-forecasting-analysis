@@ -1,0 +1,5 @@
+country,n_obs_joint_valid,sample_start,sample_end,maxlag_tested,aic_selected_lag,bic_selected_lag,hqic_selected_lag,fpe_selected_lag
+USA,286,2002-01-01,2025-10-01,12,12,2,2,12
+JAPAN,297,2001-02-01,2025-10-01,12,5,2,2,5
+UK,290,2001-02-01,2025-03-01,12,12,2,2,12
+GERMANY,290,2001-02-01,2025-03-01,12,12,2,3,12
