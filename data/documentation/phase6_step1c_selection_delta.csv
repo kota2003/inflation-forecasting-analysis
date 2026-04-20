@@ -1,0 +1,2 @@
+variant_id,step1_best_order,step1_best_aic,step1c_best_order,step1c_best_aic,delta_aic,step1b_verdict
+USA_first_diff,"(0,0,3)(0,0,2,12)",340.1059837884969,"(0,0,4)(2,0,3,12)",329.648797537492,-10.457186251004941,extend_to_Q3

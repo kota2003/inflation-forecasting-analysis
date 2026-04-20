@@ -16,23 +16,26 @@ This is **Portfolio Project 3 (P3)** in a three-project series. P1 demonstrated 
 | Phase 3 | Stationarity testing (ADF+KPSS), structural-break testing (Chow, Quandt-Andrews) | ✅ Complete |
 | Phase 4 | Feature engineering (lags, rolling statistics, regime dummies) | ✅ Complete |
 | Phase 5 | Exploratory data analysis & cross-country narrative visualisation | ✅ **Complete** |
-| Phase 6 | Model estimation — ARIMA, VAR, Ridge | ⏳ Next |
+| Phase 6 | Model estimation — ARIMA, VAR, Ridge | ⏳ **Step 1 of 3 complete** |
 | Phase 7 | Evaluation — Diebold-Mariano, walk-forward validation | Pending |
 | Phase 8 | Interpretation — Granger maps, IRF plots, narrative synthesis | Pending |
 
-As of this writing, the project has completed the five-phase analytical foundation through exploratory data analysis. The `data/processed/` directory contains four main-country feature matrices of 50–53 columns each (USA, Japan, UK, Germany — D-031-corrected stationary forms with lags, rolling statistics, and regime dummies) plus a supplementary China dataset. Phase 3 classified every series' stationarity status and characterised three pre-specified structural breaks (2008-09, 2020-03, 2022-02) via Chow and Quandt-Andrews tests. Phase 4 built the per-country feature matrices (joint-valid from 2002-02 or 2003-01) via `src.feature_engineering` v0.4.0. Phase 5 produced eight portfolio figures and twelve audit CSVs spanning cross-country CPI dynamics, correlation structure, N1 Phillips Curve deep-dive, and ACF/PACF diagnostics — with seven signature findings now flagged in `ProjectDriven.md` that directly inform Phase 6 ARIMA/VAR/Ridge estimation.
+As of this writing, the project has completed the five-phase analytical foundation through exploratory data analysis. The `data/processed/` directory contains four main-country feature matrices of 50–53 columns each (USA, Japan, UK, Germany — D-031-corrected stationary forms with lags, rolling statistics, and regime dummies) plus a supplementary China dataset. Phase 3 classified every series' stationarity status and characterised three pre-specified structural breaks (2008-09, 2020-03, 2022-02) via Chow and Quandt-Andrews tests. Phase 4 built the per-country feature matrices (joint-valid from 2002-02 or 2003-01) via `src.feature_engineering` v0.4.0. Phase 5 produced eight portfolio figures and twelve audit CSVs spanning cross-country CPI dynamics, correlation structure, N1 Phillips Curve deep-dive, and ACF/PACF diagnostics — with seven signature findings now flagged in `ProjectDriven.md` that directly inform Phase 6 ARIMA/VAR/Ridge estimation. **Phase 6 Step 1 (Layer 1 SARIMA baseline) is now complete**: five variants estimated via a three-stage grid search protocol (450-order initial grid • boundary sensitivity check • targeted Q = 3 extension), 8 portfolio figures delivered in `notebooks/06_arima_baseline.ipynb`, and two new decisions recorded (D-048 three-stage protocol with OOS-saturation stopping rule; D-049 Japan ARIMA uniqueness as an N3 narrative echo at the ARIMA layer). Phase 6 Step 2 (Layer 2 VAR core model) is the immediate next work.
 
 ---
 
-## Three Narratives — Phase 5 State
+## Three Narratives — State through Phase 6 Step 1
 
 The project is organised around three named economic narratives (ProjectScope §4). Phase 5 EDA supplies the single-number evidence for each; Phase 6 modelling will supply the causal / directional interpretation.
 
 - **N1 · Phillips Curve — shock-activated, not dead.** Cross-country post-2022 rolling Phillips slopes reach |β| ≈ 5–9 with R² ∈ [0.60, 0.75] after a 2014–2020 quiescence. The UK exhibits a unique pre/post-GFC sign flip (β = +1.68 → −0.27) absent in the other three economies. Phase 5 S3 (Fig 6, Fig 7).
 - **N2 · Monetary Policy Lag — M2 leads inflation by 12 months.** USA `corr(CPI_t, M2_{t−12}) = +0.41` contrasts with `corr(CPI_t, M2_t) = −0.17` — a sign-flip pattern consistent with the Quantity Theory of Money. Phase 5 S2 (Fig 5 cross-lag heatmap) previews what Phase 6 VAR IRF will quantify as directional causation.
-- **N3 · Japan's Uniqueness — structural divergence in 90.7 % of months.** Japan CPI YoY is below the mean of USA/UK/Germany in 253 of 279 monthly observations (mean gap −1.80 pp). Four-phase decomposition shows monotone progression: Deflation era −0.20 % → Abenomics +0.64 % → Reversal +2.99 %, with the Reversal phase showing zero deflation months (0/45). Phase 5 S1 (Fig 1, Fig 2).
+- **N3 · Japan's Uniqueness — three-lens structural divergence.** (1) Level peer-gap: Japan CPI YoY is below the mean of USA/UK/Germany in 253 of 279 monthly observations (90.7 %; mean gap −1.80 pp). (2) Phase monotone progression: Deflation era −0.20 % → Abenomics +0.64 % → Reversal +2.99 %, with the Reversal phase showing zero deflation months (0/45). Phase 5 S1 (Fig 1, Fig 2). (3) **ARIMA simplicity**: Japan is the only variant among five Step 1 candidates with triple AIC / BIC / HQIC agreement on a 4-parameter sparse order, and ARCH-LM p ≈ 0.9999 — near-perfect residual homoscedasticity. Phase 6 Step 1 (D-049).
 
-A seventh finding — recorded as **D-046** in the decision log — notes that the Phillips Curve is visible in level-based EDA (S3) but invisible under stationary-form correlation (S2). This is a deliberate methodology choice, not an inconsistency: the classical Phillips Curve is a level relationship, and both lenses play legitimate roles across Phase 5 (EDA) and Phase 6 (VAR).
+Two methodology findings are recorded separately in the decision log:
+
+- **D-046** — the Phillips Curve is visible in level-based EDA (Phase 5 S3) but invisible under stationary-form correlation (S2). This is a deliberate methodology choice, not an inconsistency: the classical Phillips Curve is a level relationship, and both lenses play legitimate roles across Phase 5 (EDA) and Phase 6 (VAR).
+- **D-048 stopping rule** — AIC in-sample improvement from SARIMA grid extension does not translate to out-of-sample performance at the orders evaluated in Phase 6 Step 1; USA_first_diff Stage (a) → Stage (c) ΔAIC = −10.46 produced OOS RMSE Δ = −0.003. OOS saturation is adopted as the principled stopping criterion, obligating Phase 7 Diebold-Mariano to compare OOS loss differentials rather than AIC rankings.
 
 ---
 
@@ -106,14 +109,22 @@ inflation-forecasting-analysis/
 │       ├── phase5_step3_phillips_fit.csv        # 12 rows — OLS {full, pre, post}
 │       ├── phase5_step3_rolling_slope.csv       # 894 rows — 60-month rolling OLS
 │       ├── phase5_step4_acf_pacf_values.csv     # 164 rows — ACF/PACF/CI per lag
-│       └── phase5_step4_ljung_box.csv           # 12 rows — Q(12/24/36) per country
+│       ├── phase5_step4_ljung_box.csv           # 12 rows — Q(12/24/36) per country
+│       ├── phase6_step1_arima_selection.csv     # 5 rows — AIC/BIC/HQIC best orders per variant
+│       ├── phase6_step1_arima_residuals.csv     # 5 rows — Ljung-Box, JB, ARCH-LM diagnostics
+│       ├── phase6_step1_arima_forecast.csv      # 340 rows — expanding-refit 1-step test forecasts
+│       ├── phase6_step1_arima_window_errors.csv # 15 rows — RMSE/MAE/bias × 3 test sub-windows
+│       ├── phase6_step1_arima_grid_*.csv        # 5 × 450 rows — Stage (a) grid per variant
+│       ├── phase6_step1b_boundary_check_*.csv   # 4 files — Stage (b) verdicts + per-variant detail
+│       └── phase6_step1c_*.csv                  # 2 files — Stage (c) Q=3 extension + selection delta
 │
 ├── notebooks/                                    # Portfolio-grade narrative layer
 │   ├── 01_data_collection.ipynb                 # Phase 1 collection + v2 rebuild
 │   ├── 02_cleaning_alignment.ipynb              # Phase 2 unit harmonisation
 │   ├── 03_stationarity_structural_breaks.ipynb  # Phase 3 ADF/KPSS + Chow/Q-A
 │   ├── 04_feature_engineering.ipynb             # Phase 4 lag/rolling/regime assembly
-│   └── 05_eda.ipynb                             # Phase 5 cross-country narrative
+│   ├── 05_eda.ipynb                             # Phase 5 cross-country narrative
+│   └── 06_arima_baseline.ipynb                  # Phase 6 Step 1 SARIMA baseline (D-048, D-049)
 │
 ├── scripts/                                      # Scratch orchestrators (pre-notebook stage)
 │   ├── phase1v2_candidate_scout.py              # Multi-source rebuild scout
@@ -133,6 +144,10 @@ inflation-forecasting-analysis/
 │   ├── phase5_step2_correlation_structure.py    # Fig 3, Fig 4, Fig 5 (D-042)
 │   ├── phase5_step3_phillips_curve.py           # Fig 6, Fig 7 (D-043, D-046)
 │   ├── phase5_step4_acf_pacf.py                 # Fig 8 (D-044)
+│   ├── phase6_step1_arima_grid.py               # Stage (a) 2,250 grid fits (D-048)
+│   ├── phase6_step1b_q3_boundary_check.py       # Stage (b) 22 boundary fits (D-048)
+│   ├── phase6_step1c_usa_firstdiff_q3_extension.py  # Stage (c) 150 targeted fits (D-048)
+│   ├── phase6_step1d_notebook_figures.py        # 8 portfolio figures consolidated
 │   └── rebuild_processed.py                     # Canonical CLI for Phase 2 regeneration
 │
 ├── src/                                          # Reusable module architecture (v0.4.0)
@@ -164,9 +179,17 @@ inflation-forecasting-analysis/
 │       ├── phase5_step2_fig5_lag_heatmap.png    # 4×5 cross-lag (D-042 Tier 2)
 │       ├── phase5_step3_fig6_phillips_scatter.png # Pre/post-GFC OLS (D-043)
 │       ├── phase5_step3_fig7_rolling_slope.png  # 60m rolling dual panel
-│       └── phase5_step4_fig8_acf_pacf.png       # 4×2 ACF+PACF grid (D-044)
+│       ├── phase5_step4_fig8_acf_pacf.png       # 4×2 ACF+PACF grid (D-044)
+│       ├── phase6_step1_fig1_variants_overview.png       # 5 variants train/test split
+│       ├── phase6_step1_fig2_aic_landscape.png           # AIC surface (p,q) at best seasonal
+│       ├── phase6_step1_fig3_ic_comparison.png           # AIC/BIC/HQIC params (D-049 triple agreement)
+│       ├── phase6_step1_fig4_residual_acf.png            # Residual ACF + Ljung-Box p-values
+│       ├── phase6_step1_fig5_heteroscedasticity.png      # Rolling |residual| (D-049 Japan signature)
+│       ├── phase6_step1_fig6_boundary_sensitivity.png    # Stage (b) ΔAIC verdicts (D-048)
+│       ├── phase6_step1_fig7_aic_oos_divergence.png      # D-048 stopping rule 2-panel figure
+│       └── phase6_step1_fig8_test_forecasts.png          # Expanding-refit OOS forecasts × 5 variants
 │
-├── ProjectDriven.md                              # Living decision log (D-001..D-047)
+├── ProjectDriven.md                              # Living decision log (D-001..D-049)
 ├── ProjectScope_v1.md                            # Immutable project scope
 ├── README.md                                     # This document
 ├── requirements.txt                              # Python dependencies
@@ -195,7 +218,7 @@ inflation-forecasting-analysis/
 - `v0.2.0` — `preprocessing` module and expanded `data_loader` (Phase 2)
 - `v0.3.0` — `stationarity` and `structural_breaks` modules (Phase 3)
 - `v0.4.0` — `feature_engineering` module (Phase 4)
-- `v0.5.0` — reserved for Phase 6 ARIMA / VAR / Ridge modelling modules
+- `v0.5.0` — reserved for Phase 6 Step 2 / 3 VAR and Ridge modelling modules (Step 1 SARIMA implemented as scratch orchestrators, no new `src/` module)
 
 ---
 
@@ -237,25 +260,32 @@ python scripts/phase5_step2_correlation_structure.py
 python scripts/phase5_step3_phillips_curve.py
 python scripts/phase5_step4_acf_pacf.py
 
+# Phase 6 Step 1 SARIMA baseline (4 scratch orchestrators; total ~75 min single CPU)
+python scripts/phase6_step1_arima_grid.py                      # ~61 min — 2,250 grid fits + 350 expanding refits
+python scripts/phase6_step1b_q3_boundary_check.py              # ~1.5 min — 22 boundary fits
+python scripts/phase6_step1c_usa_firstdiff_q3_extension.py     # ~12.5 min — 150 targeted fits + 70 refits
+python scripts/phase6_step1d_notebook_figures.py               # ~0.2 min — 8 portfolio figures consolidated
+
 # Narrated notebook path (Portfolio narrative, reproduces same outputs)
 jupyter lab notebooks/
 ```
 
-All notebooks import from `src` rather than re-implementing logic, so any future change to `src/` propagates through the entire stack.
+All notebooks import from `src` rather than re-implementing logic, so any future change to `src/` propagates through the entire stack. `notebooks/06_arima_baseline.ipynb` additionally consumes the pre-computed CSVs in `data/documentation/phase6_step1_*.csv` to avoid re-running the 75-minute grid inside the notebook; figures are regenerated inline at Run All (≈ 1–2 min).
 
 ---
 
 ## Decision Log Pointer
 
-Every analytical choice — country selection, data-source trade-offs, registry overrides, lag grids, regime specifications, EDA methodology — is logged in **`ProjectDriven.md`** with rationale, alternatives considered, and implementation references. The log currently holds **47 decisions (D-001 through D-047)** covering Phases 0 through 5. This log is the primary portfolio artefact: the quality of the decisions matters more than the sophistication of the models, and documenting them explicitly is the core differentiator of this project.
+Every analytical choice — country selection, data-source trade-offs, registry overrides, lag grids, regime specifications, EDA methodology — is logged in **`ProjectDriven.md`** with rationale, alternatives considered, and implementation references. The log currently holds **49 decisions (D-001 through D-049)** covering Phases 0 through 6 Step 1. This log is the primary portfolio artefact: the quality of the decisions matters more than the sophistication of the models, and documenting them explicitly is the core differentiator of this project.
 
 For anyone reviewing this work, the recommended reading order is:
 
 1. **`README.md`** (this document) — 3-minute overview
 2. **`ProjectScope_v1.md`** — immutable project scope (written before implementation)
-3. **`ProjectDriven.md`** — 47-decision log with full rationale
-4. **`notebooks/05_eda.ipynb`** — Phase 5 cross-country narrative (most recent deliverable)
-5. **Upstream notebooks** (`03`, `04`) — stationarity, structural breaks, feature engineering
+3. **`ProjectDriven.md`** — 49-decision log with full rationale
+4. **`notebooks/06_arima_baseline.ipynb`** — Phase 6 Step 1 SARIMA baseline (most recent deliverable; D-048, D-049)
+5. **`notebooks/05_eda.ipynb`** — Phase 5 cross-country narrative
+6. **Upstream notebooks** (`03`, `04`) — stationarity, structural breaks, feature engineering
 
 ---
 
@@ -279,11 +309,11 @@ Environment reproducibility: see `requirements.txt`. Conda environment name: `p3
 
 ## Next Steps
 
-**Phase 6 (immediate next)** — ARIMA / VAR / Ridge estimation on the Phase 4 feature matrices. The Phase 5 findings directly inform Phase 6 specification:
+**Phase 6 Step 2 (immediate next)** — Layer 2 VAR core model on the four main-country systems, to be delivered as `notebooks/07_var_model.ipynb`. Five-variable system (CPI + POLICY_RATE + UNEMPLOYMENT + GDP + M2) per country on D-031-corrected stationary inputs; AIC/BIC lag order selection at the VAR system level (distinct from the Phase 4 feature-column lag grid per D-040); D-030 dominant-driver matrix interactions (6 total: USA × 3, UK × 1, GER × 2, JPN × 0) implemented via `src.feature_engineering.PHASE6_REGIME_SPEC`; Granger causality tests for CPI ← {POLICY_RATE, M2, UNEMPLOYMENT, GDP} per country; Impulse Response Functions — especially M2 → CPI, anchoring the N2 Monetary Policy Lag narrative — with 95 % bootstrap CI; Forecast Error Variance Decomposition across the five variables. Step 2 is expected to add decisions from D-050 onwards (VAR lag selection criterion, regime-interaction mechanics).
 
-- **ARIMA baseline.** Ljung-Box Q(12) rejects white noise at p < 0.001 for all four countries (D-044); ARIMA modelling is statistically required. ACF[12] significance across all four countries argues for **SARIMA with seasonal order s=12**. Preliminary ARMA order candidates: USA AR(3), Japan ARMA(1,2), UK AR(2), Germany ARMA(2,2) — AIC/BIC grid search supersedes.
-- **VAR.** Five-variable system (CPI + POLICY_RATE + UNEMPLOYMENT + GDP + M2) per country, on D-031-corrected stationary inputs. Regime-dummy interactions follow the D-030 dominant-driver matrix. Granger causality + Impulse Response Functions will quantify N2 Monetary Policy Lag.
-- **Ridge.** 50–53 features per country under L2 regularisation; handles the multicollinearity Phase 4 deliberately did not prune (D-040). Bridges back to P2 methodology.
+**Phase 6 Step 3** — Layer 3 Ridge regression with walk-forward CV on the full 50–53-feature matrices under L2 regularisation; handles the multicollinearity Phase 4 deliberately did not prune (D-040). Bridges back to P2 methodology. Delivered as `notebooks/08_ridge_regression.ipynb`.
+
+**Phase 6 closure** — `src/` v0.5.0 bump with new modelling modules; `phase6_summary.md` handoff file; README finalisation to ✅ Complete status.
 
 **Phase 7** — Diebold-Mariano pairwise model comparison; walk-forward validation (train 2002–2019, test 2020+).
 
@@ -291,4 +321,4 @@ Environment reproducibility: see `requirements.txt`. Conda environment name: `p3
 
 ---
 
-*Portfolio Project 3 · Phase 5 complete · 47 decisions logged · `src/` at v0.4.0 · 8 figures and 12 audit CSVs produced in Phase 5.*
+*Portfolio Project 3 · Phase 6 Step 1 complete (Layer 1 SARIMA baseline; 1 of 3 modelling layers) · 49 decisions logged · `src/` at v0.4.0 (v0.5.0 reserved for Step 2/3) · 6 portfolio notebooks · 24 portfolio figures total (Phase 3 △ 6, Phase 4 △ 6, Phase 5 △ 8, Phase 6 Step 1 △ 8).*

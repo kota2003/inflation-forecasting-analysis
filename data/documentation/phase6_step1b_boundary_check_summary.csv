@@ -1,0 +1,4 @@
+variant_id,original_order,original_aic,best_extension_order,best_extension_aic,delta_aic,threshold,verdict,n_extensions_tested,n_extensions_converged
+USA_yoy_pct,"(2,0,3)(2,0,2,12)",61.75091332753935,"(2,0,3)(1,0,3,12)",61.54472101980285,-0.20619230773650088,2.0,accept_Q2,6,6
+USA_first_diff,"(0,0,3)(0,0,2,12)",340.1059837884969,"(0,0,3)(0,0,3,12)",330.965563587617,-9.14042020087993,2.0,extend_to_Q3,6,6
+UK_log_diff_pct,"(3,0,0)(1,0,2,12)",-119.14629258206799,"(3,0,0)(2,0,3,12)",-106.8209513279466,12.325341254121383,2.0,accept_Q2,6,6

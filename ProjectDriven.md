@@ -1568,3 +1568,148 @@ Phase 5 does **not** introduce a new `src/eda.py` module. The `src/__init__.py` 
 ---
 
 *Last updated: Phase 5 complete — 4-panel EDA narrative (D-041..D-047, 7 decisions) and 7 signature findings. Next: Phase 6 — ARIMA, VAR with Granger/IRF, and Ridge estimation on the Phase 4 feature matrices.*
+
+## Phase 6 Decisions
+
+*These decisions concern Layer 1 of the Phase 6 three-layer modelling architecture (ARIMA → VAR → Ridge per D-004). They are implemented in `scripts/phase6_step1*_*.py` and narrated in `notebooks/06_arima_baseline.ipynb`. Steps 2 (VAR) and 3 (Ridge) will add D-050 onwards.*
+
+---
+
+### D-048 | SARIMA Grid Scope and Boundary Sensitivity Protocol
+
+**Date:** Phase 6 · Step 1
+**Decision:** Adopt a three-stage SARIMA grid search protocol for Phase 6 Step 1 Layer 1 estimation on five CPI variants (USA_yoy_pct, USA_first_diff, JAPAN_first_diff, UK_log_diff_pct, GERMANY_first_diff):
+
+- **Stage (a)** — uniform initial grid `p ∈ [0, 4], d = 0, q ∈ [0, 4], P ∈ [0, 2], D ∈ {0, 1}, Q ∈ [0, 2], s = 12` (450 orders × 5 variants = 2,250 fits). Selection: AIC primary, BIC secondary, HQIC tertiary, parsimony (p + q + P + Q) tie-break. Expanding-window 1-step-ahead test refits.
+- **Stage (b)** — boundary sensitivity check on variants whose Stage (a) AIC-best hit the `Q = 2` upper boundary (USA_yoy_pct, USA_first_diff, UK_log_diff_pct). Test 6–7 Q = 3 neighbourhood orders per variant; threshold ΔAIC ≤ −2.0 (Burnham & Anderson 2002 "meaningfully better") to escalate.
+- **Stage (c)** — targeted `Q ∈ [0, 3]` grid extension (150 orders) only for variants meeting the Stage (b) threshold.
+
+**Stopping rule — OOS saturation:** if Stage (a) → Stage (c) delivers substantial in-sample AIC improvement but essentially invariant OOS test-window RMSE/MAE/bias, halt escalation and defer model ranking to Phase 7 Diebold-Mariano loss comparison. Empirically: USA_first_diff Stage (a) (0,0,3)(0,0,2,12) → Stage (c) (0,0,4)(2,0,3,12) produced ΔAIC = −10.46 with OOS full-test RMSE Δ = −0.003, MAE Δ = +0.003, bias Δ = +0.016 — statistically invariant. BIC and HQIC both select a simpler alternative (0,0,2)(0,0,3,12) that accepts the Q = 3 benefit while rejecting the triple-boundary parameters, further supporting that only AIC's weak 2k penalty tolerates the escalation.
+
+**Rationale:**
+
+1. **ProjectScope §9 + D-004 compliance**: the three-layer architecture specifies ARIMA with AIC/BIC selection; Stage (a)'s 450-order grid is the concrete realisation, covering Phase 5 S4 order priors (USA AR(3), JPN ARMA(1,2), UK AR(2), GER ARMA(2,2)) with generous seasonal slack.
+2. **`d = 0` fixed**: all five variants are already in D-031-corrected stationary form; further differencing would over-difference and corrupt the AIC landscape.
+3. **Boundary sensitivity is non-negotiable**: Stage (a) returned three boundary-hit variants (Q = 2). Without Stage (b) verification, a portfolio reviewer could legitimately ask "did you check Q = 3?" The D-033 Quandt-Andrews trim sensitivity precedent requires an explicit sensitivity check when a result sits at the grid boundary.
+4. **Targeted extension, not blanket extension**: Stage (c) is applied only where Stage (b) returns `extend_to_Q3` (ΔAIC ≤ −2.0). Blanket extension to Q = 3 on all variants would have added 3,375 fits for no benefit — UK_log_diff_pct returned ΔAIC = +12.33 (Q = 3 actively worse), USA_yoy_pct returned ΔAIC = −0.21 (trivially equal).
+5. **OOS saturation as principled stopping rule**: the Stage (c) AIC-best hits triple grid boundary (`q = 4, P = 2, Q = 3`). A mechanical sensitivity continuation would test `q = 5, P = 3, Q = 4` — an infinite-regress exercise. OOS invariance is the non-arbitrary termination point: the extension has exhausted its forecasting-relevant information content, regardless of in-sample AIC improvement.
+6. **Phase 7 directive**: D-048 obligates Phase 7 Diebold-Mariano to compare USA_first_diff Stage (a) and Stage (c) on loss differential (not AIC ranking) and report BIC/HQIC alternative orders as sensitivity candidates. If DM fails to reject equality of OOS losses, the stopping rule is empirically validated.
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| Stage (a) only, ignore boundary hits | Rejected — fails D-033 sensitivity precedent; portfolio-review vulnerability |
+| Blanket Q ∈ [0, 3] initial grid | Rejected — 3,375 additional Q = 3 fits on four variants (UK, USA_yoy, JPN, GER) yield no AIC improvement; mechanical not statistical |
+| Extend Stage (c) to q = 5 / P = 3 / Q = 4 | Rejected — OOS saturation; classical overfitting signature; no expected forecasting benefit |
+| Select BIC/HQIC best (0,0,2)(0,0,3,12) for USA_fd over AIC best | Deferred — Phase 7 DM adjudication is the principled resolution mechanism |
+| Variable-specific grid (per-variant custom search) | Rejected — per D-034's methodology symmetry principle; uniform spec supports cross-variant comparison |
+
+**Implementation:** Executed by four scratch scripts:
+
+- `scripts/phase6_step1_arima_grid.py` — Stage (a); 2,250 fits + 350 expanding refits; 61.3 min
+- `scripts/phase6_step1b_q3_boundary_check.py` — Stage (b); 22 fits; 1.5 min
+- `scripts/phase6_step1c_usa_firstdiff_q3_extension.py` — Stage (c); 150 fits + 70 refits; 12.5 min; in-place update of USA_first_diff rows in consolidated selection/residuals/forecast/window_errors CSVs
+- `scripts/phase6_step1d_notebook_figures.py` — figure consolidation; 8 PNGs; 0.2 min (parallel to `phase4_step5_assemble.py` "pulling together" pattern)
+
+Final AIC-best orders (post Stage (c) in-place amendment):
+
+| Variant | AIC-best order | AIC | n_params |
+|---|---|---:|---:|
+| USA_yoy_pct | (2,0,3)(2,0,2,12) | 61.75 | 10 |
+| USA_first_diff | (0,0,4)(2,0,3,12) | 329.65 | 10 |
+| **JAPAN_first_diff** | **(0,0,1)(1,0,1,12)** | **11.52** | **4** |
+| UK_log_diff_pct | (3,0,0)(1,0,2,12) | −119.15 | 7 |
+| GERMANY_first_diff | (0,0,2)(1,0,1,12) | −1.18 | 5 |
+
+All five variants pass Ljung-Box Q(12) at α = 0.05 (residual white-noise property satisfied). Heteroscedasticity is mixed (ARCH-LM p ranging from 3e-05 to 0.9999) — see D-049 for the Japan-specific observation.
+
+Stage (b) verdicts: USA_yoy_pct `accept_Q2` (ΔAIC = −0.21), USA_first_diff `extend_to_Q3` (ΔAIC = −9.14), UK_log_diff_pct `accept_Q2` (ΔAIC = +12.33). Only USA_first_diff proceeded to Stage (c).
+
+---
+
+### D-049 | Japan ARIMA Uniqueness — N3 Narrative Echo at the ARIMA Layer
+
+**Date:** Phase 6 · Step 1
+**Decision:** Formally record Japan's Step 1 SARIMA diagnostic profile as an ARIMA-layer signature finding that echoes Phase 5's N3 "Japan's Uniqueness" narrative (Phase 5 Finding #1 level peer-gap, #2 monotone phases). Japan's (0,0,1)(1,0,1,12) model is uniquely characterised on four quantitative dimensions simultaneously among the five Step 1 variants.
+
+**Four quantitative signatures (data-driven, emerged from Stage (a) execution):**
+
+1. **Triple IC agreement**: AIC = BIC = HQIC all select (0,0,1)(1,0,1,12). Japan is the sole variant where the three information criteria converge on the same order — the log-likelihood gradient saturates at low complexity.
+2. **Sparsest parameterisation**: 4 parameters (MA(1) + seasonal AR(1) + seasonal MA(1) + constant). All other variants require 5–10 parameters.
+3. **ARCH-LM p = 0.9999**: residuals are statistically indistinguishable from i.i.d. homoscedastic innovations. No other variant exceeds p > 0.8. This is a near-theoretical-maximum on the ARCH-LM scale.
+4. **Lowest training volatility**: σ_train = 0.240, versus USA_first_diff (0.541), USA_yoy_pct (0.308), Germany (0.238), UK (0.192). Japan's monthly CPI increments are the least volatile among the four main economies on the monthly first-difference scale.
+
+**Cross-phase triangulation (three independent lenses on N3):**
+
+| Lens | Phase | Finding | Quantitative signature |
+|---|---|---|---|
+| Level peer-gap | Phase 5 S1 (F#1) | Below peer mean in 253 / 279 monthly obs | 90.7 %; mean gap −1.80 pp |
+| Phase monotone | Phase 5 S1 (F#2) | Deflation → Abenomics → Reversal | 0 / 45 deflation months in Reversal phase |
+| **ARIMA simplicity** | **Phase 6 Step 1** | **Triple IC agreement + ARCH-LM p ≈ 1** | **4 parameters; ARCH-LM p = 0.9999** |
+
+Three-lens triangulation is the target portfolio structure: the same narrative claim is independently confirmed by methodologically distinct techniques. Phase 5 established the *level-based* uniqueness (structural divergence in cumulative inflation and phase-decomposed history); Phase 6 Step 1 establishes the *dynamics-based* uniqueness — Japan is the only variant whose monthly inflation changes behave like a stationary, homoscedastic, low-order ARMA process.
+
+**Rationale:**
+
+1. **Cross-phase N3 reinforcement**: D-049 is the ARIMA-layer instance of the project's central narrative N3 ("Japan's Uniqueness"). Phase 7 evaluation and Phase 8 findings.md can cite three independent pieces of evidence rather than one.
+2. **Emergent, not pre-specified**: neither the Phase 6 scope nor the Phase 5 summary anticipated "Japan will show triple IC agreement." The finding is data-driven, surfacing from Stage (a) grid execution. This parallels D-046's methodology-finding style (D-046 emerged from Phase 5 S2-vs-S3 level/stationary tension).
+3. **Independent of the numerical model**: the finding is about *the structure of the IC agreement and diagnostic profile*, not about the specific (0,0,1)(1,0,1,12) numerical forecast. Phase 7 DM tests can refine the numerical model without affecting the structural finding.
+4. **Does not obligate further Phase 6 work**: unlike D-048, D-049 is a finding record rather than a protocol. It is cited in Phase 7 narrative and Phase 8 (findings.md) without requiring additional Step 2 / Step 3 modelling.
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| Not record as decision — leave as section finding in notebook | Rejected — N3 cross-phase triangulation warrants log-level recording parallel to D-046 |
+| Record the numerical (0,0,1)(1,0,1,12) model as D-049 | Rejected — focus on structural property (triple IC + ARCH ≈ 1); numerical model may refine in Phase 7 |
+| Combine with D-048 as single Step 1 decision | Rejected — D-048 is protocol, D-049 is finding; categorically distinct |
+
+**Implementation:** narrated in `notebooks/06_arima_baseline.ipynb` Section 8 with triangulation table; quantitative signatures traceable to `data/documentation/phase6_step1_arima_{selection, residuals}.csv` (rows where `variant_id == 'JAPAN_first_diff'`).
+
+---
+
+## Phase 6 Step 1 — Interim State Summary
+
+*Phase 6 is a three-step process (ARIMA → VAR → Ridge per D-004). This interim state covers **Step 1 (Layer 1 SARIMA) only**; Steps 2 (VAR) and 3 (Ridge) will add D-050 onwards.*
+
+**After Phase 6 Step 1 SARIMA baseline estimation:**
+
+| Metric | Phase 5 | Phase 6 · Step 1 (current) |
+|---|---|---|
+| Decision-log entries | 47 | **49** (+D-048, +D-049) |
+| Narrative notebook deliverables | 5 | **6** (+`06_arima_baseline.ipynb`) |
+| Modelling layers complete | 0 / 3 | **1 / 3** (SARIMA ✅; VAR ⏳; Ridge ⏳) |
+| Portfolio figures | 8 (Phase 5) | **+8** (`phase6_step1_fig{1..8}_*.png`) |
+| Audit CSVs | 12 (Phase 5) | **+15** (grid × 5 + boundary × 4 + extension × 2 + consolidated × 4) |
+| `src/` module version | v0.4.0 | **v0.4.0** (unchanged; v0.5.0 reserved for Step 2 / 3) |
+| Phase 6 completion | — | **~33 %** |
+
+**Signature findings from Step 1 (to be cited in Phase 7 narrative and Phase 8 findings.md):**
+
+1. **Japan ARIMA uniqueness (D-049)** — the sole variant among five with triple AIC / BIC / HQIC agreement on a 4-parameter sparse order, with ARCH-LM p = 0.9999 (near-perfect residual homoscedasticity) and lowest σ_train. N3 narrative echo at the ARIMA layer; third independent lens on Japan's structural uniqueness.
+2. **AIC–OOS divergence at boundary extension (D-048 stopping rule)** — USA_first_diff Stage (a) → Stage (c) ΔAIC = −10.46 with OOS RMSE/MAE/bias essentially invariant; BIC and HQIC converge at the simpler (0,0,2)(0,0,3,12) order. Adopted as the principled stopping criterion for D-048 and obligates Phase 7 DM to compare OOS loss differentials rather than AIC ranking.
+3. **UK ENERGY+ OOS degradation (+28 %)** — UK's Stage (a) model absorbs COVID (2020–21) better than ENERGY (2022+); RMSE ratio 0.402 / 0.315 = +28 %. Echoes Phase 5 Finding #4 (UK unique Phillips-curve sign-flip pre/post-GFC), suggesting a UK-specific regime interaction that Step 2 VAR can revisit via the D-030 GDP × ENERGY interaction.
+
+**Step 1 artefact trace (all under project root):**
+
+| Artefact type | Location | Count |
+|---|---|---:|
+| Scratch scripts | `scripts/phase6_step1{,b,c,d}_*.py` | 4 |
+| Consolidated CSVs | `data/documentation/phase6_step1_arima_{selection,residuals,forecast,window_errors}.csv` | 4 |
+| Grid CSVs (Stage a) | `data/documentation/phase6_step1_arima_grid_*.csv` | 5 |
+| Boundary check CSVs (Stage b) | `data/documentation/phase6_step1b_boundary_check_{summary,variant}.csv` | 4 |
+| Q=3 extension CSVs (Stage c) | `data/documentation/phase6_step1c_*.csv` | 2 |
+| Portfolio figures | `outputs/figures/phase6_step1_fig{1..8}_*.png` | 8 |
+| Portfolio notebook | `notebooks/06_arima_baseline.ipynb` | 1 |
+
+**Phase 6 Step 2 (VAR, Layer 2) prerequisites ready:**
+
+- Phase 4 feature matrices (50–53 columns × 285–296 rows per country) are VAR-ingestion-ready
+- D-030 regime-dummy interaction matrix (6 interactions: USA × 3, UK × 1, GER × 2, JPN × 0) accessible via `src.feature_engineering.PHASE6_REGIME_SPEC`
+- Phase 5 Finding #5–7 (cross-lag heatmap, Granger-direction hints, rolling Phillips) and Phase 5 S4 Ljung-Box diagnostics are Step 2 priors
+- Step 1 forecast CSV (340 rows) available as a Phase 7 DM input baseline
+
+---
+
+*Last updated: Phase 6 Step 1 complete — 5 SARIMA variants across a three-stage grid search (D-048 protocol), 2 new decisions (D-048, D-049), 8 portfolio figures delivered. `src/` v0.4.0 unchanged; v0.5.0 reserved for Phase 6 Step 2/3 modelling modules. Next: Phase 6 Step 2 VAR estimation with D-030 regime interactions under a scope-driven protocol.*
