@@ -1,0 +1,6 @@
+country,form,base,lag,rolling,split,period,interaction,total_features
+USA,primary,4,20,20,3,2,3,52
+JAPAN,primary,4,20,20,3,2,0,49
+UK,primary,4,20,20,3,2,1,50
+GERMANY,primary,4,20,20,3,2,2,51
+USA,first_diff_secondary,4,20,20,3,2,3,52

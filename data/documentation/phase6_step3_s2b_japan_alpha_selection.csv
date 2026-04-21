@@ -1,0 +1,2 @@
+country,form,n_train_total,n_features,n_splits,grid_min,grid_max,grid_n,selected_alpha,selected_log10_alpha,cv_val_mse_mean,cv_val_mse_std,boundary_status
+JAPAN,primary,215,49,5,1000.0,1000000.0,7,3162.2776601683795,3.5,0.085375888386915,0.04976869655712364,interior

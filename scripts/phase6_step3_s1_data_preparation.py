@@ -26,8 +26,17 @@ Outputs (under data/documentation/):
 """
 from __future__ import annotations
 
-import re
+# ---------------------------------------------------------------------------
+# sys.path injection — ensure project root is importable before 'src' is used
+# ---------------------------------------------------------------------------
+import sys
 from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+import re
 from typing import Dict
 
 import numpy as np
@@ -37,6 +46,7 @@ from src import (
     MAIN_COUNTRIES,
     build_all_features,
     build_country_features,
+    load_effective_registry,
 )
 import src.feature_engineering as fe_module
 
@@ -44,7 +54,6 @@ import src.feature_engineering as fe_module
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DOC_DIR = PROJECT_ROOT / "data" / "documentation"
 DOC_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -89,16 +98,48 @@ def build_usa_first_diff_features() -> pd.DataFrame:
     Build USA feature matrix with CPI in first_diff secondary form.
 
     Strategy: temporarily patch ``src.feature_engineering.REGISTRY_OVERRIDES``
-    to force ``USA_CPI`` → ``first_diff``, rebuild the feature matrix
+    to force ``('USA', 'CPI')`` → ``first_diff``, rebuild the feature matrix
     end-to-end so that all CPI-derived lag / rolling / interaction columns
     are consistent with the first_diff base, then restore the original
     dictionary state.
+
+    Note
+    ----
+    ``REGISTRY_OVERRIDES`` uses **tuple keys** ``(country, indicator)``,
+    not string keys — see feature_engineering.py line 68 and the
+    tuple-based lookup in ``load_effective_registry()`` line 137.
     """
-    key = "USA_CPI"
+    key = ("USA", "CPI")
+
+    # Snapshot original state
     had_override = key in fe_module.REGISTRY_OVERRIDES
     original_value = fe_module.REGISTRY_OVERRIDES.get(key)
+
+    # Diagnostic: effective form BEFORE patch
+    reg_before = load_effective_registry()
+    row_before = reg_before[
+        (reg_before["country"] == "USA") & (reg_before["indicator"] == "CPI")
+    ].iloc[0]
+    print(
+        f"    [pre-patch ] USA_CPI effective form = "
+        f"{row_before['effective_phase6_var_input']!r}  "
+        f"(override_applied = {row_before['override_applied']})"
+    )
+
     try:
         fe_module.REGISTRY_OVERRIDES[key] = "first_diff"
+
+        # Diagnostic: effective form AFTER patch
+        reg_after = load_effective_registry()
+        row_after = reg_after[
+            (reg_after["country"] == "USA") & (reg_after["indicator"] == "CPI")
+        ].iloc[0]
+        print(
+            f"    [post-patch] USA_CPI effective form = "
+            f"{row_after['effective_phase6_var_input']!r}  "
+            f"(override_applied = {row_after['override_applied']})"
+        )
+
         usa_fd = build_country_features("USA")
     finally:
         if had_override:
@@ -283,6 +324,33 @@ def main() -> None:
     ]:
         print_df[c] = print_df[c].round(4)
     print(print_df.to_string(index=False))
+
+    # ---- 5. Sanity check: USA primary vs secondary must differ on target scale
+    usa_primary = df_target[
+        (df_target["country"] == "USA") & (df_target["form"] == "primary")
+    ].iloc[0]
+    usa_secondary = df_target[
+        (df_target["country"] == "USA") & (df_target["form"] == "first_diff_secondary")
+    ].iloc[0]
+    same_mean = np.isclose(usa_primary["train_mean"], usa_secondary["train_mean"])
+    same_std = np.isclose(usa_primary["train_std"], usa_secondary["train_std"])
+    print("\n" + "=" * 72)
+    print("SANITY CHECK — USA dual-form differentiation")
+    print("=" * 72)
+    print(
+        f"    primary   train: mean = {usa_primary['train_mean']:.4f}, "
+        f"std = {usa_primary['train_std']:.4f}"
+    )
+    print(
+        f"    secondary train: mean = {usa_secondary['train_mean']:.4f}, "
+        f"std = {usa_secondary['train_std']:.4f}"
+    )
+    if same_mean and same_std:
+        raise RuntimeError(
+            "USA primary and secondary have identical target statistics. "
+            "The REGISTRY_OVERRIDES patch did not take effect."
+        )
+    print("    PASS: primary and secondary differ (dual-form patch effective)")
 
     print("\nS1 complete. Proceed to S2 (α grid + walk-forward CV) after review.")
 

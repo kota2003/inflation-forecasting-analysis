@@ -1,0 +1,5 @@
+country,feature_name,rank_abs_full,coef_full_train,abs_coef_full,category,sign_stable,in_top5,phillips_lens_active
+USA,USA_UNEMPLOYMENT,39,-0.0187997993258651,0.0187997993258651,base,False,False,False
+JAPAN,JAPAN_UNEMPLOYMENT,27,-0.0007251769833119,0.0007251769833119,base,False,False,False
+UK,UK_UNEMPLOYMENT,19,-0.0069744400117898,0.0069744400117898,base,True,False,False
+GERMANY,GERMANY_UNEMPLOYMENT,4,-0.04024521064318,0.04024521064318,base,True,True,True

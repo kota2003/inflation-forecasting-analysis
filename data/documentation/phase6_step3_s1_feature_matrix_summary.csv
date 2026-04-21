@@ -1,0 +1,6 @@
+country,form,n_cols_total,n_features_X,target_col,n_rows_pre_dropna,n_rows_joint_valid,first_valid_date,last_valid_date,n_train,n_test,train_end,test_start
+USA,primary,53,52,USA_CPI,298,274,2003-01-01,2025-10-01,204,70,2019-12-01,2020-01-01
+JAPAN,primary,50,49,JAPAN_CPI,298,285,2002-02-01,2025-10-01,215,70,2019-12-01,2020-01-01
+UK,primary,51,50,UK_CPI,291,278,2002-02-01,2025-03-01,215,63,2019-12-01,2020-01-01
+GERMANY,primary,52,51,GERMANY_CPI,291,278,2002-02-01,2025-03-01,215,63,2019-12-01,2020-01-01
+USA,first_diff_secondary,53,52,USA_CPI,298,285,2002-02-01,2025-10-01,215,70,2019-12-01,2020-01-01
