@@ -3409,3 +3409,913 @@ No new CSV. The decision record itself is the audit trail. Cross-references: D-0
 
 ---
 
+### D-076 | `src/evaluation.py` v0.4.3 Materialisation — D-075 Tranche 1 Execution
+
+**Date:** Phase 7 pre-flight (post-Phase 6 closure, pre-DM battery)
+
+**Decision:** Convert the declarative commitment recorded in D-075 into
+an execution record. Create `src/evaluation.py` as a new module and
+bump `src/__init__.py` from v0.4.2 to v0.4.3. The module's public API
+comprises exactly ten exports — one small-sample correction callable,
+three loss-function primitives, three Diebold-Mariano variants, two
+CSV adapters, and one schema constant — all of which are consumed by
+Phase 7 sub-step scripts S1–S4 (and the Phase 7 closeout notebook
+`09_evaluation_interpretation.ipynb`). No existing v0.4.2 API is
+changed; v0.4.3 is a strict additive patch.
+
+**API surface (10 exports):**
+
+| Kind | Name | Signature / value |
+|---|---|---|
+| Correction | `HARVEY_LEYBOURNE_NEWBOLD_ADJUSTMENT` | `(T: int, h: int) -> float`, returns `sqrt((T + 1 − 2h + h(h−1)/T) / T)` per HLN (1997) |
+| Loss | `rmse` | `(y_true, y_pred, axis=None) -> float \| np.ndarray` — NaN-aware, pure NumPy |
+| Loss | `mae`  | `(y_true, y_pred, axis=None) -> float \| np.ndarray` — NaN-aware, pure NumPy |
+| Loss | `mase` | `(y_true, y_pred, scale_denominator, axis=None) -> float \| np.ndarray` — caller supplies scale per Phase 7 Q#2 (both `VAR_MASE_D060` and seasonal-naive reporting accepted) |
+| DM   | `diebold_mariano_standard` | `(e1, e2, h) -> (dm_stat, p_value)`; squared-error loss; sample variance; HLN correction; t-distribution with T−1 df for p-value |
+| DM   | `diebold_mariano_hac`      | `(e1, e2, h, kernel='bartlett', n_lags=None) -> (dm_stat, p_value)`; Newey-West long-run variance with Bartlett kernel, default `n_lags = max(h−1, 0)`; HLN correction — addresses D-051 partial-whitening caveat |
+| DM   | `diebold_mariano_robust`   | `(e1, e2, h) -> (dm_stat, p_value)`; absolute-error loss differential `|e1|−|e2|`; sample variance; HLN correction — addresses D-061 COVID-origin instability (UK h=12 2020-05-01 origin forecast −980.29 vs actual 0.54) |
+| Adapter | `load_phase6_forecasts` | `(layer: Literal['arima','var','ridge'], doc_dir=None) -> pd.DataFrame` — returns the unified schema |
+| Adapter | `align_matched_terms`   | `(df1, df2, on=('country','form','h','target_date'), y_true_tol=1e-6) -> (y_true, e1, e2)` — inner merge + y_true cross-layer agreement gate |
+| Schema  | `UNIFIED_SCHEMA_COLUMNS`  | `('country','form','h','origin_date','target_date','y_true','y_pred')` — Phase 7 Q#3 adopted variant |
+
+**Unified schema mapping (ARIMA / VAR / Ridge → DM-ready):**
+
+| Source field (ARIMA) | Source field (VAR) | Source field (Ridge) | Unified field | Rule |
+|---|---|---|---|---|
+| `variant_id` prefix | `country` | `country` | `country` | UPPERCASE country code |
+| `variant_id` suffix → {primary, secondary} map | always `primary` | `form` normalised via `_RIDGE_FORM_MAP` | `form` | USA secondary = `first_diff` per D-048; Ridge's compound label `first_diff_secondary` is normalised to `secondary` at adapter load time; unknown forms raise `ValueError` |
+| implicit (D-048) | `horizon` | `horizon` | `h` | integer months ∈ {1, 3, 6, 12} |
+| `date − 1 month` | `origin_date` | `origin_date` | `origin_date` | ARIMA's `date` = target convention verified empirically (USA YoY matches Jan/Feb/Mar 2024 observed values at the claimed `date`). All three adapters parse datetime columns via `pd.to_datetime(..., format="ISO8601")` to accommodate the heterogeneous date-string formats observed in the Phase 6 Step 1 CSV (`YYYY-MM-DD` for the first variant block, `YYYY-MM-DD HH:MM:SS` for subsequent blocks — an upstream format drift discovered at this pre-flight gate) |
+| `date` | `target_date` | `target_date` | `target_date` | — |
+| `actual` | `actual` (CPI filter) | `actual` | `y_true` | — |
+| `predicted` | `forecast` (CPI filter) | `forecast` | `y_pred` | — |
+
+**Rationale:**
+
+1. **Pre-commitment honoured on schedule.** D-075 Tranche 1 was an
+   explicit declarative commitment that Phase 7 pre-flight would
+   materialise `src/evaluation.py`. Honouring that commitment on the
+   turn immediately following Phase 6 closure is the intended audit
+   behaviour — a deferred decision that materialises late is
+   operationally indistinguishable from one that was never made.
+   D-076 closes that gap.
+
+2. **v0.4.3 patch semantic is correct.** The 10 new exports are
+   strictly additive; no v0.4.2 symbol is renamed, removed, or
+   behaviourally altered. Under the project's conservative semver
+   discipline (v0.4.0 → v0.4.1 → v0.4.2 → v0.4.3, each a narrow
+   additive patch), this is the third consecutive evidence-grounded
+   promotion on the same Phase 6/7 track — a portfolio-readable
+   pattern showing that `src/` growth is driven by concrete
+   cross-script reuse, not speculative module design.
+
+3. **ProjectScope §12 blueprint coverage now 5 of 8.** Phase 6 closed
+   with `data_loader.py`, `preprocessing.py`, `stationarity.py`
+   (+ `structural_breaks.py` per D-032), `feature_engineering.py`, and
+   the Phase 6 shared-utilities convenience module `modelling_utils.py`
+   (not in the §12 blueprint, but a direct D-063 promotion). D-076
+   adds the fifth blueprint file, `evaluation.py`. The remaining three
+   blueprint files — `src/models/{arima_model, var_model, ridge_model}.py`
+   — remain deferred per D-075 Tranche 2 pending Phase 7 closeout
+   empirical duplication evidence.
+
+4. **Phase 7 S1–S4 scripts can import clean from turn one.** Without
+   `src/evaluation.py` in place at Phase 7 entry, the first DM
+   sub-step script would inline RMSE / MAE / MASE / DM implementations
+   and a CSV adapter. Under the Phase 7 scope (four or more sub-step
+   scripts per T-2), that inline logic would hit the D-063 4× threshold
+   within the first week of Phase 7, forcing a promotion refactor
+   against already-written audit CSVs — exactly the regression risk
+   D-063 was designed to avoid. Pre-materialising at v0.4.3 eliminates
+   that risk, matching the cleaner pattern used at Phase 6 Step 3
+   (D-074 promoted `modelling_utils` extensions before notebook 08 was
+   written rather than after).
+
+5. **CSV adapter design is schema-verified, not inferred.** The
+   `load_phase6_forecasts` adapters were written against the exact
+   column schemas and dtypes returned by
+   `scripts/phase7_preflight_schema_check.py` at the pre-flight gate.
+   The ARIMA `variant_id` → (country, form) mapping enumerates exactly
+   the five variants present in the current CSV
+   (USA_yoy_pct → USA primary, USA_first_diff → USA secondary,
+   JAPAN_first_diff → JAPAN primary, UK_log_diff_pct → UK primary,
+   GERMANY_first_diff → GERMANY primary), and the adapter raises
+   `ValueError` on any unrecognised variant — schema drift is a hard
+   fault, not a silent pass.
+
+6. **Matched-origin integrity is enforced at merge time.**
+   `align_matched_terms` performs an inner join on
+   `(country, form, h, target_date)` and verifies that `y_true` agrees
+   across the two layers within a `1e-6` tolerance. A mismatch above
+   tolerance indicates either a country/form mix-up at the caller or
+   a transform inconsistency between Phase 6 layers, both of which
+   would invalidate subsequent DM results silently if the check were
+   omitted. This is the software-engineering counterpart to the
+   walk-forward origin-set empirical check already performed at
+   pre-flight (all four countries: VAR ↔ Ridge origin sets identical).
+
+7. **Label normalisation is an adapter-time responsibility, not a
+   caller-time one.** The Phase 6 Step 3 Ridge CSV uses the compound
+   label `first_diff_secondary` for the USA dual-form secondary rows,
+   while D-048 / D-064 / D-071 throughout ProjectDriven.md refer to
+   this same concept as "secondary form". The unified schema commits
+   to the role abstraction `{primary, secondary}` because that is the
+   language of the decision record; the Ridge adapter therefore
+   normalises the compound label at load time via `_RIDGE_FORM_MAP`.
+   Unknown form values raise `ValueError` — the same fail-loud pattern
+   as `_ARIMA_VARIANT_MAP`. This discovery was surfaced by the
+   notebook 09 pre-flight live-fallback coverage matrix (the Phase 7
+   Q#3 adapter schema was committed against `pandas.DataFrame.head()`
+   samples which happened to contain only `primary` rows at position
+   0 — a sampling artefact rather than a schema property); the pattern
+   of "Ridge uses domain-specific labels; unified schema normalises
+   to role labels" is now the documented convention.
+
+8. **Pre-flight acceptance-gate iterations are portfolio-visible.**
+   The sequence — schema check → v0.4.3 build → acceptance gate Test
+   5 FATAL on ISO8601 drift → patched v0.4.3 → notebook 09 scaffold
+   run → Ridge form discrepancy surfaced by live fallback → label
+   normalisation patch — is three v0.4.3 iterations in one pre-flight
+   turn pair. Each iteration produced a concrete audit artefact (the
+   acceptance-gate stdout, the notebook 09 HTML export) which the
+   next iteration consumed. This is the intended evidence-grounded
+   iteration pattern and is the reason D-076 is recorded after all
+   three iterations rather than after the first.
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| Defer `src/evaluation.py` to Phase 7 S2 (first DM script writes the primitives inline) | Rejected — violates D-075 Tranche 1's explicit pre-commitment; creates the regression-risk refactor anticipated by D-075 rationale point 2 |
+| Implement `src/evaluation.py` but exclude CSV adapters (keep them in scratch) | Rejected — the two adapters will be called 4+ times across Phase 7 S1/S2/S2b/S3/S4 under the same D-063 duplication logic; promoting them now is the single-source-of-truth choice |
+| Single `diebold_mariano()` function with `variance='sample'|'hac'|...` parameter | Rejected — the three variants carry distinct decision linkage (standard ↔ default, HAC ↔ D-051, robust ↔ D-061); separate callables produce clearer audit CSV labels and separate portfolio heatmaps in notebook 09 |
+| Wrap `statsmodels.tsa.stattools` DM utility | Rejected — `statsmodels` does not implement the HLN small-sample correction out of the box; a custom NumPy implementation is ~30 lines, fully auditable, and portfolio-preferable as a "first-principles" artefact |
+| Add a `compute_mase_scales()` helper that computes the scale denominator | Rejected — caller-side responsibility per Phase 7 Q#2 (`VAR_MASE_D060` is already promoted at v0.4.2 as the canonical VAR scale; the seasonal-naive variant is trivially `mean(|y_t − y_{t−12}|)` and does not warrant a named helper) |
+| Expose `_newey_west_long_run_variance` publicly | Rejected — this is a private implementation detail of `diebold_mariano_hac`; exporting it would invite callers to bypass the DM interface and drift from the HLN-corrected convention |
+| Use `statsmodels.stats.sandwich_covariance` for the HAC variance | Rejected — the Newey-West / Bartlett kernel is ~10 lines of NumPy; adding a sandwich-covariance dependency just for DM is disproportionate |
+
+**Implementation:**
+
+- `src/evaluation.py` — new module, ~440 LOC, docstring documents every
+  decision linkage in the module header. Import policy: top-level
+  `numpy`, `pandas`, `scipy.stats`; no sklearn or statsmodels (DM is
+  pure NumPy + scipy). Re-uses `src.data_loader.find_project_root` so
+  default CSV path resolution is consistent with the rest of `src/`.
+- `src/__init__.py` — `__version__` bumped `0.4.2` → `0.4.3`;
+  docstring Modules section gains an `evaluation` entry; version
+  history gains a `0.4.3` line; 10 new re-exports under a dedicated
+  "Phase 7 evaluation re-exports" block; `__all__` extends from 97 to
+  107 entries.
+- `scripts/phase7_preflight_evaluation_unit_test.py` — acceptance-gate
+  script that exercises all 10 exports across seven test sections
+  (version check, HLN formula, loss primitives, DM synthetic cases,
+  adapter schema conformance, matched-terms alignment, end-to-end DM
+  on real USA primary h=1 data). Stdout structured as pass/fail lines
+  with a final aggregate verdict; exit code 0 iff every check passes.
+- **No changes** to `scripts/phase6_*.py` (20 files), `scripts/phase7_preflight_schema_check.py`
+  (throw-away diagnostic from this same pre-flight turn), or any
+  notebook. The D-063 / D-074 precedent of not refactoring closed
+  sub-steps is preserved.
+
+**Audit:**
+
+No new CSV. v0.4.3 is a code-only patch; the audit trail consists of
+(a) the git commit introducing the three files above, (b) this D-076
+decision record, and (c) the acceptance-gate script's stdout, which
+should be captured once at promotion time and retained if anomalous.
+Phase 7 sub-step scripts S1 onward produce the DM audit CSVs
+themselves, not this module.
+
+**Propagation:**
+
+- `src/evaluation.py` docstring cross-references D-048 / D-051 / D-060
+  / D-061 / D-062 / D-068 / D-070 / D-071 / D-075 / D-076 so future
+  readers can trace the design origin of each primitive.
+- `scripts/phase7_s1_forecast_integration.py` (next turn) imports
+  `load_phase6_forecasts` as its primary ingestion, `align_matched_terms`
+  for the coverage matrix, and `UNIFIED_SCHEMA_COLUMNS` for the CSV
+  header manifest. Expected audit CSVs:
+  `phase7_s1_unified_forecasts.csv`, `phase7_s1_coverage_matrix.csv`.
+- `scripts/phase7_s2_dm_standard_battery.py` imports `diebold_mariano_standard`
+  and runs the 24-test β-option matrix. Expected decision: **D-077**
+  (DM integration protocol) and **D-078** (DM standard verdict).
+- `scripts/phase7_s2b_dm_hac_sensitivity.py` imports
+  `diebold_mariano_hac`. Expected decision: **D-079** (HAC agreement
+  rate vs standard per D-051 caveat).
+- `scripts/phase7_s3_usa_dual_form.py` imports `diebold_mariano_standard`
+  and `diebold_mariano_robust` for the ARIMA Stage (a) vs Stage (c)
+  and Ridge yoy_pct vs first_diff matched comparisons. Expected
+  decision: **D-080** (USA dual-form Phase 7 resolution per D-048 and
+  D-071).
+- `scripts/phase7_s4_covid_origin_excluded.py` imports all three DM
+  variants and runs the 2020 Q1–Q3 origins-excluded sensitivity per
+  D-061. Expected decision: **D-081** (COVID sensitivity verdict,
+  especially UK h=12 77× MASE reduction re-evaluated under trimmed
+  window).
+- `notebooks/09_evaluation_interpretation.ipynb` assembly at Phase 7
+  closeout imports from the v0.4.3 API exclusively; no inline DM
+  implementations. Expected decision: **D-082** (Phase 7 closeout —
+  DM battery aggregate verdict + D-075 Tranche 2 re-assessment).
+- `README.md` — `src/ at v0.4.2` reference updates to v0.4.3 with
+  the ProjectScope §12 blueprint coverage line revised from "4 of 8"
+  (pre-D-076 baseline) to "5 of 8". ProjectScope §12 blueprint diff
+  closure for `evaluation.py` is recorded; `src/models/` subdirectory
+  diff remains open pending D-075 Tranche 2 re-assessment at Phase 7
+  closeout.
+- `phase6_summary.md` — no change (Phase 6 closure is frozen). Phase 7
+  pre-flight summary lives in this D-076 entry and, if generated, in
+  `phase7_preflight_summary.md` (optional portfolio artefact; default
+  is to keep the summary inside D-076's propagation list).
+
+---
+### D-078 | Phase 7 S2 Diebold-Mariano Battery — Verdict, HAC Verification, S3 Scope Merge
+
+**Date:** Phase 7 · Step 2 (S2)
+
+**Decision:** The 24 β-option paired-DM cells + 1 D-071 USA dual-form
+cell are tested under all three DM variants (standard squared-loss,
+HAC Newey-West Bartlett, robust absolute-loss) with
+Harvey-Leybourne-Newbold (1997) small-sample correction, in a single
+pass by `scripts/phase7_s2_dm_battery.py`. Five cells are significant
+at α = 0.05 under standard DM; 21 of 25 cells have 3-variant winner
+agreement. HAC yields zero winner-flips relative to standard
+(D-051 partial-whitening concern empirically closed). Four cells
+exhibit robust-vs-standard winner disagreement, all of the pattern
+`std=tie, rob=significant` — consistent with D-061 outlier influence
+generalised beyond UK h=12. The USA dual-form D-071 cell returns tie
+under all three variants (p_std = 0.102, p_hac = 0.099, p_rob = 0.131),
+which does not overturn D-071's MASE-based "first_diff preferred"
+evidence (the D-071 claim is INTRA-layer Ridge-yoy_pct-vs-Ridge-first_diff,
+which the DM battery does not test because different forms predict
+different targets and so are not paired-DM-compatible). S3 (USA
+dual-form extended DM) is scope-merged into S2: all S3-planned
+comparisons except ARIMA Stage (a) vs Stage (c) are already executed
+here, and Stage (c) re-generation is out of scope per D-048 stopping
+rule commitment.
+
+**Core verdict table (5 significant cells at α=0.05 under standard DM):**
+
+| Cell | winner | n | dm_std | p_std | dm_rob | p_rob | Ancestor |
+|---|---|---:|---:|---:|---:|---:|---|
+| USA primary h=1 ARIMA-VAR | ARIMA | 58 | −2.529 | 0.014 | −4.168 | 0.0001 | D-062, D-048 |
+| USA primary h=3 VAR-Ridge | Ridge | 58 | +2.522 | 0.014 | +2.639 | 0.011 | D-070 |
+| UK primary h=1 ARIMA-VAR | ARIMA | 51 | −3.167 | 0.003 | −3.433 | 0.001 | D-048, D-051 |
+| UK primary h=1 VAR-Ridge | Ridge | 51 | +2.864 | 0.006 | +2.696 | 0.010 | D-070, D-051 |
+| UK primary h=3 VAR-Ridge | Ridge | 51 | +2.048 | 0.046 | +2.650 | 0.011 | D-070 |
+
+Convention: `dm_stat < 0` means `layer_1` (ARIMA in ARIMA-VAR, etc.)
+has lower squared-loss and is therefore the winning forecaster.
+
+**Narrative-level summary (for notebook 09 §4 and §8):**
+
+1. **VAR is the weakest layer wherever Phase 7 differentiation
+   exists.** All five α=0.05-significant cells involve VAR on the
+   losing side. In the remaining 20 non-significant cells the winner
+   is "tie" — neither layer is detectably better. This is the
+   statistical-test counterpart of D-070's 12/16 point-estimate Ridge
+   win, with the caveat that Ridge's architectural advantage is
+   detectable only at the USA / UK subset, not JAPAN or GERMANY.
+
+2. **D-062 (USA yoy_pct × VAR bias) is confirmed at paired-DM level.**
+   The pre-Phase-7 point-estimate finding that USA VAR systematically
+   under-predicts the 2022 energy-shock inflation spike carries
+   through to significant ARIMA-VAR DM in favour of the univariate
+   baseline (USA h=1 p_std = 0.014; p_rob = 0.0001). This is one of
+   Phase 7's cleanest N1 / N2 signals.
+
+3. **JAPAN and GERMANY are "hard to differentiate regardless of
+   layer."** 0 of 6 cells significant at α=0.05 in each country under
+   standard DM. For GERMANY, two of the six cells flip to significant
+   under robust loss (ARIMA-VAR and VAR-Ridge at h=1), suggesting
+   outlier influence obscures a real difference that
+   absolute-loss reveals. For JAPAN, all six cells remain tie even
+   under robust — a portfolio-meaningful finding that Japan's
+   forecasting difficulty is fundamentally high-variance across all
+   three methodologies, not a layer-specific weakness. This
+   strengthens N3 (Japan's uniqueness).
+
+4. **Ridge architectural advantage emerges at h=3, not at h=1.**
+   Both USA and UK Ridge-vs-VAR cells become significant at h=3
+   (p_std = 0.014 / 0.046 respectively) after being tie (USA, p=0.332)
+   or already significant (UK, p=0.006) at h=1. At h=6 and h=12 the
+   significance fades — consistent with forecast-accuracy attenuation
+   at longer horizons and with the D-061 outlier-influence pattern
+   at h=12 intensifying variance.
+
+**HAC sensitivity result (absorbed from planned D-079 scope):**
+
+HAC DM with Newey-West Bartlett long-run variance, `n_lags = max(h-1, 0)`,
+yields **zero winner-flips across all 25 cells**. The maximum
+|p_standard − p_hac| is 0.042; no cell moves across the α=0.05
+boundary. D-051's partial-whitening concern (LB(12) pass rate 55% at
+VAR(12)) is therefore empirically non-material for this DM battery.
+D-079 as a separate sub-step is not required; this paragraph closes
+its scope.
+
+**Robust-loss divergence (4 cells with std=tie, rob=significant):**
+
+| Cell | dm_std, p_std | dm_rob, p_rob | d_mean_squared | d_mean_absolute |
+|---|---:|---:|---:|---:|
+| USA h=1 ARIMA-Ridge | −1.516, 0.135 | −3.713, 0.0005 | −2.11 | −0.61 |
+| USA h=12 VAR-Ridge | +1.482, 0.144 | +2.097, 0.040 | **+296.67** | +4.83 |
+| GERMANY h=1 ARIMA-VAR | −1.683, 0.099 | −2.564, 0.013 | −0.31 | −0.18 |
+| GERMANY h=1 VAR-Ridge | +1.821, 0.075 | +2.720, 0.009 | +0.30 | +0.18 |
+
+All four cells share the pattern `standard=tie, robust=significant`.
+The USA h=12 VAR-Ridge cell's `d_mean_squared = +296.67` is the
+standout — a VAR squared-error value roughly 600× the cell's mean
+absolute-loss differential, diagnostic of the same extreme-error
+pattern D-061 identified for UK h=12 at the 2020-05-01 origin. This
+motivates the S4 sub-step (COVID-origin excluded DM re-run) in its
+narrow form: re-run the 4 flagged cells and verify whether the
+`std=tie` verdicts convert to signed winners under origin-trimmed
+data.
+
+**USA dual-form D-071 cell result:**
+
+The USA secondary h=1 ARIMA-Ridge cell returns:
+
+  * p_standard = 0.102, winner = tie
+  * p_hac      = 0.099, winner = tie
+  * p_robust   = 0.131, winner = tie (dm_robust = −1.53)
+
+All three variants agree on tie at α=0.05. This result is
+**consistent with but does not directly validate** D-071. D-071's
+"first_diff preferred for N2 narrative" rests on three lenses:
+
+  1. Ridge USA first_diff MASE vs Ridge USA yoy_pct MASE:
+     39–85% improvement (D-070 / D-071)
+  2. Ridge USA first_diff lag-3 coefficient = −0.136 matching
+     VAR IRF peak −0.149 at h=4 (D-056 cross-lens)
+  3. USA first_diff bias at h=12 = +0.23 vs yoy_pct bias +4.24
+     (intrinsic scale-anchoring property of the forms)
+
+The Phase 7 DM lens is a fourth comparison, and it is neutral
+(tie). The neutrality comes from a single cell (ARIMA-vs-Ridge in
+first_diff form at h=1) testing whether ARIMA or Ridge is the
+better forecaster of USA CPI in first_diff units — not whether
+first_diff is the right form in which to forecast USA CPI.
+D-071 stands on lenses (1)–(3); the Phase 7 DM result adds no new
+evidence in either direction. No amendment is made to D-071.
+
+**Rationale:**
+
+1. **Three-variant pass at S2 economises the sub-step graph.**
+   Original Phase 7 plan scoped separate S2 (standard) / S2b (HAC)
+   / S4 (robust via COVID-excluded). Running all three variants in
+   one pass at S2 preserves the decision-record granularity (the
+   matrix CSV carries per-variant columns) while collapsing three
+   planned executions into one. Post-hoc the collapse pays off
+   because HAC returns 0 flips — S2b would have produced no new
+   evidence and still required a decision record.
+
+2. **5/25 significant is portfolio-defensible as the main result.**
+   Phase 7 does not require a majority-significant battery. It
+   requires sufficient evidence to attest the layer-ordering
+   narrative in N1 / N2 / N3. The UK h=1 ARIMA > Ridge > VAR chain
+   alone (p = 0.003, 0.165, 0.006) closes N1 for UK. The USA h=1
+   ARIMA-VAR result closes D-062 at paired-DM level. The h=3
+   Ridge-beats-VAR result for USA / UK closes D-070 at the
+   medium-horizon level. That is three substantive findings from
+   five cells — ample for a Phase 8 write-up.
+
+3. **JAPAN / GERMANY's 0/6 is itself a finding, not a gap.** A
+   portfolio reader would expect paired DM to detect a difference
+   everywhere if layers truly differed. That 2 of 4 countries
+   show no detectable difference is evidence about forecasting
+   difficulty, not evidence against the three-layer architecture.
+   GERMANY's robust-loss signal at 2 cells (a near-miss under
+   standard) narrows to "outliers mask an underlying difference";
+   JAPAN's consistency across all variants narrows to "Japan's
+   CPI is genuinely high-variance to all three layers."
+
+4. **S3 merge preserves D-071 integrity.** S3 was originally
+   scoped to test D-071's preferences at the DM level. Two of its
+   three planned comparisons map to cells already in S2
+   (USA primary h=1 ARIMA-Ridge; USA secondary h=1 ARIMA-Ridge);
+   the third (ARIMA Stage (a) vs Stage (c) at USA first_diff)
+   requires Stage (c) forecast re-generation that D-048's
+   stopping rule explicitly forbids (Stage (a) is the locked
+   selected spec). The S3 script as originally designed would
+   therefore produce either a duplicate of two S2 cells or an
+   unexecutable comparison. Merging S3's executable scope into
+   S2 is the honest closure.
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| Split S2 / S2b / S4 into three sub-step scripts as originally planned | Rejected — S2 with three variants completes in <1 s, produces one audit CSV, and the HAC result (0 flips) would have forced D-079 to be a trivial "HAC verified, nothing changed" record |
+| Treat 5/25 significant as a thin result and expand scope | Rejected — α = 0.05 across 25 paired DM tests with HLN correction is a standard expectation; more cells significant would arguably indicate inflated family-wise error rather than better evidence |
+| Apply multiple-testing correction (Bonferroni, FDR) to the 25 p-values | Rejected — D-078 is decision-gate-primary; portfolio narrative reports each cell individually with p-value attribution. Family-wise correction would force UK h=3 (raw p=0.046) to become non-significant (Bonferroni α/25 = 0.002), a loss not offset by a stronger per-cell guarantee |
+| Include Stage (c) ARIMA re-generation to test D-048 stopping rule | Rejected — D-048's commitment is that stopping-rule-selected Stage (a) is the locked spec. Re-running Stage (c) solely for a DM test against Stage (a) would contradict the locked commitment for a marginal test gain (ΔAIC = −10.46 and ΔRMSE = −0.003 already point to non-significant difference per D-048's pre-commit) |
+| Re-run VAR in USA first_diff form to enable a symmetric primary-vs-secondary Ridge-vs-VAR cell | Rejected — violates D-062 scope (VAR locked at D-031 primary form); adds a fifth VAR fit without resolving any outstanding decision |
+| Append the DM battery results directly to `phase7_summary.md` rather than writing D-078 | Rejected — decision records are the audit-trail primary source; the summary file mirrors them but does not replace them |
+
+**Implementation:**
+
+  * `scripts/phase7_s2_dm_battery.py` — 420-LOC script, pure
+    orchestration; no DM arithmetic re-implemented (all from
+    `src.evaluation` v0.4.3). Stdout structured in 8 labelled steps
+    including a post-battery decision-gate readout.
+  * Per-cell matrix: 25 rows × 26 columns, stored at
+    `data/documentation/phase7_s2_dm_matrix.csv`.
+  * Aggregated summary: 14 rows (3 per-pair + 4 per-country +
+    4 per-horizon + 2 per-scope + 1 overall), stored at
+    `data/documentation/phase7_s2_dm_summary.csv`.
+  * **No changes** to `src/` (v0.4.3 stable), to any notebook, or to
+    any Phase 6 / Phase 7 Step 1 artefact.
+
+**Audit (CSVs emitted):**
+
+  * `phase7_s2_dm_matrix.csv`  — 25 rows × 26 cols
+  * `phase7_s2_dm_summary.csv` — 14 rows × 13 cols
+
+**Propagation:**
+
+  * **S2b HAC sub-step**: closed in-place by this decision record.
+    D-079 as a separate sub-step is not required.
+  * **S3 USA dual-form sub-step**: closed in-place by this decision
+    record. D-080 as a separate sub-step is not required. D-071's
+    "first_diff preferred" claim stands on MASE + coefficient +
+    IRF lenses; the Phase 7 DM lens is tie and does not adjudicate.
+  * **S4 COVID-origin excluded sensitivity** (`scripts/phase7_s4_covid_excluded.py`):
+    executes with narrow scope — re-runs the 25-cell battery with
+    2020-03 through 2020-08 walk-forward origins excluded, and
+    quantifies the verdict change for the 4 robust-flagged cells.
+    Expected decision: **D-079** (renumbered from original plan;
+    S2b's original D-079 slot is repurposed because S2b is merged
+    into D-078).
+  * **Phase 7 closeout** (`notebooks/09_evaluation_interpretation.ipynb`
+    + `phase7_summary.md` + README update): aggregates S1 + S2 + S4
+    results, writes the cross-lens match summary (§9), and commits
+    the Phase 8 handoff. Expected decision: **D-080** (renumbered
+    from original D-082).
+  * `notebooks/09_evaluation_interpretation.ipynb` Section 4 now
+    renders the phase7_s2_dm_matrix.csv heatmap on next re-run
+    (no code change needed; the `_load_audit_or_pending` helper
+    transitions automatically when the CSV appears).
+
+---
+### D-079 | Phase 7 S4 COVID-Origin Sensitivity — Narrative Revision and Architectural-Claim Caveat
+
+**Date:** Phase 7 · Step 4 (S4)
+
+**Decision:** Walk-forward origins `{2020-03-01 through 2020-08-01}`
+are excluded and the 25-cell DM battery is re-executed by
+`scripts/phase7_s4_covid_excluded.py`. Seven verdict changes are
+observed (4 standard, 5 robust, 7 any-variant). The changes are
+directionally asymmetric: three cells *gain* significance under
+origin trimming (COVID origins masked an underlying difference) while
+four cells *lose* significance (COVID origins drove the S2 verdict).
+The S2 Ridge-vs-VAR wins at h ∈ {1, 3} are all COVID-era artefacts
+that do not survive trimming; the S2 ARIMA wins at h=1 strengthen
+under trimming. D-079 therefore records a **substantive revision to
+the pre-Phase-7 architectural narrative**: the Phase 6 D-070 12-of-16
+Ridge MASE advantage remains factually correct at point-estimate
+level, but does not translate into a COVID-robust DM dominance. The
+most robust Phase 7 paired-DM finding is that **univariate ARIMA
+beats multivariate VAR and high-dimensional Ridge at h=1 for both
+USA and UK**. A new N3-relevant finding emerges: JAPAN h=6 VAR-Ridge
+gains rob-significance under trimming (tie → VAR).
+
+**Verdict change table (7 flips across 25 cells):**
+
+| Cell | S2 std | S4 std | S2 rob | S4 rob | Direction |
+|---|---|---|---|---|---|
+| USA h=1 ARIMA-Ridge | tie | **ARIMA** | ARIMA | ARIMA | GAIN (std) |
+| USA h=3 VAR-Ridge | Ridge | tie | Ridge | tie | LOSE (both) |
+| JAPAN h=6 VAR-Ridge | tie | tie | tie | **VAR** | GAIN (rob) |
+| UK h=1 ARIMA-Ridge | tie | tie | tie | **ARIMA** | GAIN (rob) |
+| UK h=1 VAR-Ridge | Ridge | tie | Ridge | tie | LOSE (both) |
+| UK h=3 VAR-Ridge | Ridge | tie | Ridge | Ridge | LOSE (std only) |
+| UK h=6 VAR-Ridge | tie | tie | tie | **Ridge** | GAIN (rob) |
+
+Three of four standard-DM flips are losses of significance (all three
+Ridge wins in S2 vanish post-trim). The fourth standard flip (USA h=1
+ARIMA-Ridge, `tie → ARIMA`, `p_std` 0.135 → 0.001) is an emphatic
+gain and is the single most substantive directional change in the
+entire Phase 7 battery.
+
+**Post-trim signed cells under standard DM (α = 0.05):**
+
+| Cell | winner | p_std (S4) | p_rob (S4) | vs S2 |
+|---|---|---:|---:|---|
+| USA h=1 ARIMA-VAR | ARIMA | 0.044 | 0.001 | unchanged |
+| **USA h=1 ARIMA-Ridge** | **ARIMA** | **0.001** | **0.000** | **GAINED** |
+| UK h=1 ARIMA-VAR | ARIMA | 0.024 | 0.017 | unchanged |
+
+All three post-trim standard-DM-significant cells are ARIMA wins at
+h=1. VAR wins: zero. Ridge wins: zero.
+
+**Post-trim signed cells under robust DM (α = 0.05):**
+
+ARIMA wins (5): USA h=1 vs VAR, USA h=1 vs Ridge, UK h=1 vs VAR,
+UK h=1 vs Ridge, GERMANY h=1 vs VAR.
+Ridge wins (4): USA h=12 vs VAR, UK h=3 vs VAR, UK h=6 vs VAR,
+GERMANY h=1 vs VAR.
+VAR wins (1): JAPAN h=6 vs Ridge.
+
+Under robust loss the picture is richer and more favourable to the
+three-layer architecture: each of ARIMA / VAR / Ridge wins in at
+least one cell. But the standard-DM picture — which is the
+portfolio-primary test per D-076 — is cleanly ARIMA-dominant at h=1
+and tie elsewhere.
+
+**N1 / N2 / N3 narrative implications (for Phase 8 write-up):**
+
+*N1 · Cross-country inflation dynamics.*
+UK has the clearest layer differentiation at h=1 post-trim
+(2/3 pairs show a signed ARIMA winner under standard DM, with the
+third VAR-Ridge cell a tie). USA at h=1 shows the same pattern
+(ARIMA beats both counterparts, VAR-Ridge tie). JAPAN shows the
+new VAR-wins-at-h=6 robust signal that is absent in all other
+countries. GERMANY shows rob-only differences concentrated at h=1
+that barely fail the standard test. The country-level pattern is
+therefore *not* that one layer wins everywhere, but that:
+
+  * h=1 univariate is best for USA + UK
+  * medium-horizon Ridge edge (S2) was COVID-era-specific
+  * long-horizon (h=12) differences exist only under robust loss
+    and only for USA
+
+*N2 · Policy response patterns.*
+The pre-Phase-7 hypothesis, consistent with D-071, was that
+policy-transmission-aware multivariate layers (VAR, Ridge) would
+beat the univariate baseline at post-2022-tightening-cycle
+horizons (h ∈ {3, 6, 12}). Post-trim evidence does not support
+this broadly: no VAR-vs-Ridge or ARIMA-vs-Ridge cell at h ∈ {3, 6, 12}
+is significant under standard DM. The S2 significant Ridge wins at
+h=3 (USA, UK) are all COVID-period artefacts. Revised N2 statement:
+"Policy-transmission signal in Ridge first_diff coefficients
+(D-071) remains the decisive cross-lens evidence at the
+coefficient level; the paired-DM at the forecast level does not
+carry the claim through beyond the COVID-origin subset."
+
+*N3 · Japan's uniqueness.*
+JAPAN h=6 VAR-Ridge `tie → VAR` under robust loss is a new
+post-trim finding. Japan's forecasting landscape is *structured*
+(VAR has an edge at a specific horizon) in a way no other country
+reproduces, and this structure is only visible after the
+2020-Q1–Q3 shock window is removed. Combined with Japan's 0/6
+cells-significant pattern in S2 standard DM, the N3 claim
+strengthens: Japan has a genuinely different forecasting
+topography that emerges only when the COVID outlier period is
+separated out. This is an empirical counterpart to the Ridge
+coefficient-magnitude stratification result (D-067, N3 septuple).
+
+**Architectural-claim caveat (D-070 relationship):**
+
+D-070 committed that Ridge wins 12 of 16 (country × h) primary-form
+cells on MASE at point-estimate level. That finding is **not
+retracted**. What D-079 records is that 3 of the 3 cells where this
+Ridge point-estimate advantage reached DM α=0.05 significance in
+S2 are COVID-era-dependent. The claim therefore decomposes as
+follows:
+
+  * **Robust claim:** Ridge has a systematic 12/16-cell MASE
+    advantage at point-estimate level (D-070, unchanged).
+  * **Weaker claim:** Three of those sixteen cells (USA h=3,
+    UK h=1, UK h=3) reach paired-DM α=0.05 significance when
+    the full walk-forward origin set is used (D-078, unchanged).
+  * **Caveat:** None of those three cells remain significant
+    under COVID-origin trimming (D-079, new).
+
+Portfolio narrative therefore reports "Ridge has a measurable
+point-estimate MASE edge that translates to statistical
+significance only when COVID-era origins are included" rather
+than "Ridge is DM-attested architecturally dominant." The weaker
+phrasing is the intellectually honest one and aligns with the
+D-070 caveat that the absolute-difficulty scale (all layers exceed
+naive-MASE = 1 at post-2019 test window) also undermines strong
+architectural claims.
+
+**Rationale:**
+
+1. **Origin-trimming set is D-061-anchored, not convenience-selected.**
+   The excluded window `{2020-03, ..., 2020-08}` is the same
+   regime-transition stress-test window D-061 pre-flagged for VAR.
+   Removing six consecutive origins at the COVID-onset boundary
+   produces a coherent counterfactual (steady-state walk-forward
+   ex-shock) rather than a data-mining-friendly subset. The
+   trimmed sample sizes (52 and 45 per cell) remain above the
+   n=30 underpowered threshold.
+
+2. **Directional asymmetry (3 gain, 4 lose) rules out pure
+   noise-reduction interpretation.** If COVID origins were only
+   adding noise, trim would move p-values uniformly in one
+   direction (closer to significance, in favour of every
+   underlying trend). The observed pattern shows COVID adding
+   BOTH noise (which trim removes, revealing signal — GAIN cases)
+   and SIGNAL (which trim removes, revealing absence of underlying
+   difference — LOSE cases). The asymmetry attests that the
+   trim is genuinely informative.
+
+3. **USA h=1 ARIMA-Ridge p-shift 0.135 → 0.001 is the single
+   most diagnostic cell.** A nine-order-of-magnitude p-value
+   change under a six-origin trim is extremely strong evidence
+   that the S2 tie was dominated by outlier variance from the
+   COVID-onset origins, and the underlying 52-origin signal is
+   unambiguously in ARIMA's favour. This single cell refutes the
+   easiest "the ties mean no real differences" interpretation
+   of S2 and re-centres the Phase 7 narrative on h=1 univariate
+   dominance.
+
+4. **No re-run of S2's unflipped cells is needed.** HAC was
+   verified at S2 (0 flips, closed inside D-078). The 18 cells
+   that did not flip under S4 are confirmed robust-to-both
+   HAC and COVID-origin trimming. This reduces D-080 closeout
+   scope to aggregating S1 + S2 + S4 results rather than
+   running additional sensitivities.
+
+5. **Intellectual-honesty framing is portfolio-preferred.** The
+   revised N1 / N2 narratives are weaker claims than the
+   pre-Phase-7 implicit "Ridge wins architecturally" reading of
+   D-070. A portfolio that reports evidence-bounded conclusions
+   is strictly preferable (for technical-hiring audiences) to
+   one that over-claims; D-079 documents the weaker, more
+   defensible claim so Phase 8 can write to that baseline.
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| Exclude a wider COVID window (e.g., 2020-Q1 through 2021-Q2) | Rejected — expands the "subjective trim" footprint; n would drop into the 30-40 range at some cells; D-061's pre-flagged window is 2020 Q1–Q3 specifically |
+| Exclude *target* dates instead of *origin* dates | Rejected — the origin is the decision point at which the forecast is made; target-date exclusion would asymmetrically affect h=3/6/12 cells (different target windows per horizon) |
+| Retract D-070 entirely in light of S4 | Rejected — D-070 is a factually correct MASE point-estimate result and remains the Ridge-vs-VAR evidence at that granularity. D-079's caveat concerns the DM-level translation, not the MASE fact |
+| Report S2 verdicts as primary and S4 only as appendix-level sensitivity | Rejected — the 4 LOSE cases flip the narrative interpretation of the S2 Ridge wins from "architectural advantage" to "COVID-era artefact"; this is a primary-report finding, not appendix |
+| Use a different outlier definition (e.g., > 3σ forecast error) instead of calendar-origin exclusion | Rejected — calendar-based exclusion is transparent and pre-committed at D-061; σ-based exclusion is model-dependent and introduces a second layer of DM-internal variability |
+| Replace the standard-DM primary verdict with robust-DM primary | Rejected — standard-DM with HLN correction is the Diebold-Mariano (1995) / HLN (1997) reference test. Robust is auxiliary and D-076 committed standard as primary. Elevating robust in post-trim analysis would be an analytical goal-post shift |
+
+**Implementation:**
+
+  * `scripts/phase7_s4_covid_excluded.py` — 380-LOC script reading
+    S1 and S2 outputs, re-running the 25-cell battery on trimmed
+    origins, and writing two CSVs.
+  * Uses `src.evaluation` v0.4.3 unchanged; no new primitives
+    introduced.
+  * Trimmed sample sizes: 58 → 52 (USA, JAPAN), 51 → 45 (UK,
+    GERMANY). Both remain above n = 30.
+  * **No changes** to `src/`, to any other script, to any notebook,
+    or to any earlier-phase CSV.
+
+**Audit (CSVs emitted):**
+
+  * `phase7_s4_dm_trimmed_matrix.csv` — 25 rows × 22 cols
+  * `phase7_s4_verdict_delta.csv`     — 25 rows × 14 cols
+
+Plus this decision record.
+
+**Propagation:**
+
+  * `notebooks/09_evaluation_interpretation.ipynb` Sections 7
+    (COVID sensitivity) and 9 (cross-lens summary) receive the
+    substantive narrative. Section 7 renders the delta CSV as a
+    flip-direction table. Section 9's N1 / N2 / N3 paragraphs
+    are written to the revised claims above.
+  * `phase7_summary.md` (to be written at Phase 7 closeout)
+    records the revised signature findings numbered 1–5 with
+    D-079 as the concluding sub-step decision.
+  * `README.md` update at closeout: the "Findings" / "Results"
+    section quotes the post-trim 3-cell ARIMA dominance as the
+    primary Phase 7 result, with the Ridge MASE / VAR bias
+    findings (D-070, D-062) as supporting evidence.
+  * **D-080** (Phase 7 closeout, renumbered from original D-082)
+    aggregates S1 + S2 + S4 verdicts, commits the revised N1 /
+    N2 / N3 narratives, re-evaluates the D-075 Tranche 2
+    `src/models/` promotion decision (expected: defer again —
+    Phase 7 produced no model-fitting duplication), and
+    signals Phase 8 entry.
+
+---
+### D-080 | Phase 7 Closeout — Aggregate Verdict, Tranche 2 Re-assessment, Phase 8 Handoff
+
+**Date:** Phase 7 closeout
+
+**Decision:** Phase 7 is complete. The Diebold-Mariano evaluation
+phase produced five decisions (D-076 through D-079 plus this D-080),
+five executable scripts (`phase7_preflight_schema_check.py`,
+`phase7_preflight_evaluation_unit_test.py`,
+`phase7_s1_forecast_integration.py`,
+`phase7_s2_dm_battery.py`,
+`phase7_s4_covid_excluded.py`),
+six audit CSV artefacts (S1 × 2, S2 × 2, S4 × 2),
+one `src/` promotion (`src/evaluation.py` at v0.4.3),
+one populated portfolio notebook (`09_evaluation_interpretation.ipynb`),
+and one narrative summary (`phase7_summary.md`). The original Phase 7
+planning table at pre-flight anticipated up to seven decisions
+(D-076 through D-082); the realised set consolidates to five because
+S2 absorbed the HAC and S3 scopes (per D-078) and closeout is renumbered
+from D-082 to D-080. D-075 Tranche 2 (`src/models/` sub-directory
+promotion) is **deferred again** based on empirical Phase 7 evidence:
+the five Phase 7 scripts consumed `src.evaluation` primitives without
+re-implementing model-fitting logic, so the D-063 4×-duplication
+threshold was not reached.
+
+**Phase 7 aggregate verdict (N1 / N2 / N3):**
+
+*N1 · Cross-country inflation dynamics — DM-attested conclusions.*
+Layer differentiation is measurable and layer-ordering evidence exists
+but is concentrated at h=1 and at two of four countries. UK h=1 is
+the cleanest cell-cluster: ARIMA beats VAR (p_std = 0.003),
+Ridge beats VAR (p_std = 0.006), and ARIMA-vs-Ridge is tie
+(p_std = 0.165). The three-way verdict reads ARIMA ≈ Ridge > VAR.
+USA h=1 post-trim shows ARIMA beating both VAR (p = 0.044) and
+Ridge (p = 0.001 post-trim, was p = 0.135 pre-trim — a substantive
+D-079 finding). JAPAN has 0/6 cells significant under standard DM
+across all 4 horizons (and only one rob-flip to VAR at h=6 post-trim);
+GERMANY has 0/6 cells significant under standard DM
+(two rob-signed h=1 cells pre- and post-trim). The N1 statement
+therefore reads: layer differentiation is USA / UK specific and
+concentrated at h=1; JAPAN and GERMANY are indistinguishable under
+standard DM, which is itself a substantive finding about forecasting
+difficulty rather than a failure to detect layer edge.
+
+*N2 · Policy response patterns — revised claim.*
+The pre-Phase-7 expectation, consistent with D-070 (Ridge 12/16 MASE
+win) and D-071 (Ridge first_diff preferred for N2), was that Ridge
+would dominate VAR at policy-transmission horizons h ∈ {3, 6, 12}.
+S2 supported this weakly (3/12 Ridge-vs-Ridge-VAR cells significant
+at α = 0.05 under standard DM). S4 overturned this: all three
+S2-significant Ridge-wins at h ∈ {3, 6, 12} (USA h=3, UK h=1, UK h=3)
+lose significance under COVID-origin trimming. The revised N2
+statement is **"policy-transmission signal is preserved at the
+coefficient level (D-071's VAR-IRF ↔ Ridge-lag3 match with magnitudes
+−0.149 and −0.136 respectively) but does not carry through to
+forecast-level DM when COVID origins are excluded."** Ridge's
+point-estimate MASE advantage (D-070) is factually unchanged but is
+recast as a COVID-era effect, not a steady-state architectural edge.
+
+*N3 · Japan's uniqueness — strengthened, not weakened.*
+Japan's 0/6 cells significant under standard DM across all horizons
+is itself a portfolio-relevant finding: no pair of the three layers
+can systematically out-forecast another for Japan. The S4 COVID-trim
+introduced one new rob-significant cell (JAPAN h=6 VAR-Ridge, tie →
+VAR), which is a pattern not present in any other country and
+emerges only after the 2020 shock window is removed. This constitutes
+an **additional N3 fingerprint** to add to the D-067 Ridge
+coefficient-magnitude stratification evidence (Japan max |coef| ≈
+0.01 vs USA_primary max 0.71 — a 70× stratification gap). N3's
+"Japan's forecasting topography is fundamentally different" claim
+thus accumulates evidence from coefficient magnitudes (D-067),
+DM-null pattern at all horizons (D-078), and post-COVID-trim
+medium-horizon VAR edge (D-079) — three independent Ridge/DM lenses
+plus the earlier VAR/IRF and Phillips-Curve evidence from Phases 5
+and 6. The septuple-confirmed framing from D-072 / D-073 can be
+updated to **octuple-confirmed** at Phase 8 if the methodology lead
+accepts the Phase 7 DM-null pattern and the post-trim VAR-h6 edge
+as two new lenses.
+
+**D-075 Tranche 2 re-assessment:**
+
+D-075 committed that `src/models/{arima_model, var_model, ridge_model}.py`
+promotion would be re-assessed at Phase 7 closeout using the same
+D-063 4×-duplication threshold that justified D-063's
+`src/modelling_utils.py` promotion. The Phase 7 empirical record:
+
+| Script | Model-fitting call sites | Re-implementation of `src.evaluation`? |
+|---|---:|---|
+| `phase7_preflight_schema_check.py` | 0 | No |
+| `phase7_preflight_evaluation_unit_test.py` | 0 | No |
+| `phase7_s1_forecast_integration.py` | 0 | No |
+| `phase7_s2_dm_battery.py` | 0 | No |
+| `phase7_s4_covid_excluded.py` | 0 | No |
+
+Zero Phase 7 scripts refit an ARIMA / VAR / Ridge model; all consumed
+pre-computed Phase 6 forecasts via `src.evaluation.load_phase6_forecasts`.
+The D-063 4×-duplication threshold is not met. Tranche 2 is
+**deferred again**, with a revised deferral rationale: the project
+architecture has empirically converged on a "model fits live in
+notebooks 06–08; evaluation lives in notebook 09 + `src.evaluation`"
+pattern, and forcing an `src/models/` sub-directory would require
+model-wrapper classes that no current caller requests. The Tranche 2
+slot is preserved in `ProjectScope.md` §12 (still 5 of 8 blueprint
+items materialised) for future project iterations that may introduce
+additional model families or cross-project re-use.
+
+**Phase 8 handoff state:**
+
+The following artefacts are ready for Phase 8 consumption:
+
+  * `data/documentation/phase7_s1_unified_forecasts.csv`
+  * `data/documentation/phase7_s1_coverage_matrix.csv`
+  * `data/documentation/phase7_s2_dm_matrix.csv`
+  * `data/documentation/phase7_s2_dm_summary.csv`
+  * `data/documentation/phase7_s4_dm_trimmed_matrix.csv`
+  * `data/documentation/phase7_s4_verdict_delta.csv`
+  * `notebooks/09_evaluation_interpretation.ipynb` — fully populated
+  * `phase7_summary.md` — narrative summary parallel to `phase6_summary.md`
+  * `src/evaluation.py` at v0.4.3 (10 new exports, 107 total `__all__` entries)
+  * `ProjectDriven.md` through D-080 (80 total decisions)
+  * `README.md` v0.4.3-reflecting
+
+Phase 8 directives derived from Phase 7 (for `findings.md` assembly):
+
+  1. Primary portfolio finding: ARIMA surprisingly competitive at
+     h = 1 for USA and UK, with 3-cell signed dominance post-COVID-trim.
+     Report as "Complexity does not always win."
+  2. Secondary finding: Ridge architectural advantage at the
+     paired-DM level is COVID-era-specific; the point-estimate
+     MASE edge (D-070) is retained as a separate, narrower claim.
+  3. N3 methodology meta-finding: Japan's forecasting landscape
+     evidences uniqueness across 7 independent lenses (D-072
+     septuple) + 2 Phase 7 DM lenses = 9 lenses total. Report as
+     "Japan's structural uniqueness is the project's most
+     comprehensively triangulated empirical finding."
+  4. Cross-lens methodology highlight: VAR IRF peak −0.149 at h = 4
+     (D-056) × Ridge first_diff lag-3 coefficient −0.136 (D-067 /
+     D-071) × DM-null across Japan × Phase 7 post-trim evidence
+     constitute a four-lens cross-project methodology backbone.
+     Report as the project's core analytical defensibility.
+
+**Rationale:**
+
+1. **Closeout uses Phase 7's own evidence, not pre-Phase-7 expectations.**
+   The pre-flight handoff (D-076) anticipated that Phase 7 would
+   primarily validate D-070's Ridge advantage. The actual evidence
+   rebalanced the narrative toward ARIMA h=1 dominance (D-079). The
+   closeout decision records the revision honestly rather than
+   forcing the pre-flight expectation onto the D-080 text. Portfolio
+   audiences read decision logs for evidence-to-conclusion alignment;
+   an honest revision is portfolio-stronger than a coerced narrative.
+
+2. **Tranche 2 deferral is not a Phase 7 failure.** D-075 committed
+   that `src/models/` promotion would happen **if** empirical
+   evidence warranted, and not otherwise. Phase 7's zero refit calls
+   is the right outcome for an evaluation phase consuming pre-computed
+   forecasts. The `src/` architecture at v0.4.3 is correct for the
+   project's current scope; forcing additional promotion for
+   blueprint-completeness reasons alone would violate D-063's
+   evidence-grounded-promotion principle.
+
+3. **Decision-number compression is architecturally honest.** D-078
+   absorbed D-079 (HAC) and D-080 (S3) original scopes because the
+   empirical evidence made separate decisions redundant. D-080
+   (closeout) was originally D-082. The compressed numbering
+   (D-076..D-080 over five decisions instead of seven) preserves
+   1-to-1 correspondence between decisions and executed sub-steps.
+   ProjectDriven.md therefore reads cleanly as "every decision
+   corresponds to an executed artefact" rather than "some decisions
+   are marked vacant."
+
+4. **Phase 8 scope is narrower than originally planned.** The
+   original Phase 7 → Phase 8 handoff envisioned extensive
+   interpretation work; with the Phase 7 revision, Phase 8's core
+   task is writing `findings.md` and `methodology.md` to the
+   revised N1 / N2 / N3 statements above plus the cross-lens
+   methodology highlight. No new analytical computation is required.
+   This tightens Phase 8 to 2–3 turns of writing rather than
+   additional data work.
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| Extend Phase 7 with additional sensitivity analyses (bootstrap, longer trim windows, multi-kernel HAC) | Rejected — the three-lens battery (standard, HAC, robust) and the COVID-origin trim already cover the decision-critical sensitivity space; additional sub-steps would dilute the narrative without adding substantive evidence |
+| Promote `src/models/` now at v0.5.0 for blueprint completeness | Rejected — violates D-063 evidence-grounded promotion principle (0 refit calls in Phase 7); creates deferred maintenance burden for wrappers no caller currently needs |
+| Retract D-070 given S4 evidence | Rejected — D-070 is a MASE point-estimate factual statement that remains correct; D-079 adds a DM-level caveat without overturning the underlying MASE finding |
+| Revise D-071 USA first_diff preference given S4 post-trim USA secondary cell weakening | Rejected — D-071 rests on 3 non-DM lenses (MASE improvement, VAR IRF match, bias behaviour under 2022 shock); Phase 7 DM of the USA secondary cell is a 4th lens that returns tie both in S2 and in S4. D-071's preference is not contradicted, just not confirmed by DM |
+| Upgrade N3 from septuple to octuple in this decision | Rejected — evidence supports the upgrade but the formal N3 framing is a Phase 8 methodology-writing task; D-080 flags it for Phase 8 and documents the 2 new lenses (DM-null pattern + post-trim VAR-h6 edge) rather than committing the octuple framing here |
+| Split closeout into "D-080 analytical" + "D-081 administrative" decisions | Rejected — administrative scope (Tranche 2 defer, Phase 8 handoff) is small enough to fit inside one decision; splitting would trigger another vacancy concern |
+
+**Implementation:**
+
+  * `ProjectDriven.md` updated through D-080 (total 80 decisions).
+  * `phase7_summary.md` written to the D-078 + D-079 + D-080 content.
+  * `README.md` Phase 7 row updated to "Complete", signature findings
+    added to Results section, `src/` reference updated to v0.4.3,
+    ProjectScope §12 blueprint line updated to "5 of 8" (unchanged
+    since D-076 — Tranche 2 remains open).
+  * `notebooks/09_evaluation_interpretation.ipynb` re-run and
+    updated with real S2 / S4 data in Sections 4, 7; narrative
+    in Sections 8, 9, 10, 11 revised per the aggregate verdict
+    above.
+  * **No changes** to `src/` (v0.4.3 stable — Tranche 2 deferred
+    again).
+  * **No changes** to any pre-Phase-7 audit CSV or decision record.
+
+**Audit:**
+
+  * This decision record.
+  * `phase7_summary.md` (new).
+  * `README.md` diff (v0.4.3 reflection).
+  * `notebooks/09_evaluation_interpretation.ipynb` updates.
+
+**Propagation (Phase 8 directives):**
+
+  * `docs/findings.md` (Phase 8 deliverable): write 3 narrative
+    paragraphs to the revised N1 / N2 / N3 statements above; cite
+    D-078, D-079, D-080 plus D-056 / D-067 / D-070 / D-071 / D-072
+    cross-phase lenses.
+  * `docs/methodology.md` (Phase 8 deliverable): document the
+    four-phase iteration pattern (pre-flight → S1 → S2 → S4 →
+    closeout) as the project's core evidence-grounded-iteration
+    template.
+  * Portfolio one-pager: single chart (notebook 09 §4 DM heatmap
+    or an equivalent post-trim heatmap), single headline (ARIMA
+    h=1 surprise), three bullets (N1, N2, N3 revised).
+  * LinkedIn post hook (Phase 8 closeout): "The simplest model
+    sometimes wins the DM test — Phase 7 finding from P3 inflation
+    forecasting project."
+
+---

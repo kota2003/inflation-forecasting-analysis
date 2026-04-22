@@ -11,6 +11,7 @@ This package is consumed by:
   - notebooks/04_feature_engineering.ipynb      (Phase 4 narrative)
   - notebooks/07_var_model.ipynb                 (Phase 6 Step 2 narrative)
   - notebooks/08_ridge_regression.ipynb          (Phase 6 Step 3 narrative)
+  - notebooks/09_evaluation_interpretation.ipynb (Phase 7 narrative, pending)
   - scripts/*.py                                 (CLI orchestrators)
 
 Modules
@@ -34,7 +35,17 @@ modelling_utils      Phase 6 shared utilities. At v0.4.2 covers:
                          (v0.4.2, D-074).
                      Narrow-scope principle retained (no model-fitting
                      calls); full model wrappers remain deferred to
-                     Phase 6 closure's v0.5.0 assessment.
+                     Phase 7 closeout's v0.5.0 assessment per D-075.
+evaluation           Phase 7 evaluation primitives (v0.4.3, D-076):
+                       - Loss functions (RMSE, MAE, MASE).
+                       - Diebold-Mariano variants (standard, HAC,
+                         robust) with Harvey-Leybourne-Newbold (1997)
+                         small-sample correction.
+                       - CSV adapters that normalise Phase 6 OOS
+                         forecast artefacts into a unified
+                         DM-ready schema.
+                     Narrow-scope: no forecast re-computation, no
+                     aggregation across (country, h) cells.
 
 Version history
 ---------------
@@ -49,10 +60,17 @@ Version history
        Patch bump — no API change to v0.4.1; adds 7 constants +
        5 helper functions + 1 reference dict. Driven by the same
        4×-duplication rule as D-063.
+0.4.3  Added evaluation module for Phase 7 DM pre-flight (D-076,
+       executing D-075 Tranche 1). Patch bump — no API change to
+       v0.4.2 exports. Adds 1 correction callable + 3 loss primitives
+       + 3 Diebold-Mariano variants + 2 CSV adapters + 1 schema
+       constant = 10 new exports. ProjectScope §12 blueprint item 5
+       of 8 now materialised; `src/models/` subdirectory remains
+       deferred per D-075 Tranche 2.
 """
 from __future__ import annotations
 
-__version__ = "0.4.2"
+__version__ = "0.4.3"
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -184,6 +202,27 @@ from .modelling_utils import (  # noqa: F401
     VAR_MASE_D060,
 )
 
+# ──────────────────────────────────────────────────────────────────
+# Phase 7 evaluation re-exports (v0.4.3, D-076)
+# ──────────────────────────────────────────────────────────────────
+from .evaluation import (  # noqa: F401
+    # Harvey-Leybourne-Newbold correction (callable constant)
+    HARVEY_LEYBOURNE_NEWBOLD_ADJUSTMENT,
+    # Loss primitives
+    rmse,
+    mae,
+    mase,
+    # Diebold-Mariano variants
+    diebold_mariano_standard,
+    diebold_mariano_hac,
+    diebold_mariano_robust,
+    # CSV adapters
+    load_phase6_forecasts,
+    align_matched_terms,
+    # Unified schema reference
+    UNIFIED_SCHEMA_COLUMNS,
+)
+
 
 __all__ = [
     # Package meta
@@ -291,4 +330,15 @@ __all__ = [
     "make_ridge_pipeline",
     "compute_walk_forward_origins",
     "VAR_MASE_D060",
+    # Phase 7 evaluation — v0.4.3 (D-076)
+    "HARVEY_LEYBOURNE_NEWBOLD_ADJUSTMENT",
+    "rmse",
+    "mae",
+    "mase",
+    "diebold_mariano_standard",
+    "diebold_mariano_hac",
+    "diebold_mariano_robust",
+    "load_phase6_forecasts",
+    "align_matched_terms",
+    "UNIFIED_SCHEMA_COLUMNS",
 ]

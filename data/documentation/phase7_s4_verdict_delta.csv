@@ -1,0 +1,26 @@
+country,form,h,pair,n_paired_s4,winner_std_s2,winner_std_s4,change_std,winner_rob_s2,winner_rob_s4,change_rob,flip_std,flip_rob,any_flip
+USA,primary,1,ARIMA-VAR,52,ARIMA,ARIMA,no change,ARIMA,ARIMA,no change,False,False,False
+USA,primary,1,ARIMA-Ridge,52,tie,ARIMA,tie → ARIMA,ARIMA,ARIMA,no change,True,False,True
+USA,primary,1,VAR-Ridge,52,tie,tie,no change,tie,tie,no change,False,False,False
+USA,primary,3,VAR-Ridge,52,Ridge,tie,Ridge → tie,Ridge,tie,Ridge → tie,True,True,True
+USA,primary,6,VAR-Ridge,52,tie,tie,no change,tie,tie,no change,False,False,False
+USA,primary,12,VAR-Ridge,52,tie,tie,no change,Ridge,Ridge,no change,False,False,False
+JAPAN,primary,1,ARIMA-VAR,52,tie,tie,no change,tie,tie,no change,False,False,False
+JAPAN,primary,1,ARIMA-Ridge,52,tie,tie,no change,tie,tie,no change,False,False,False
+JAPAN,primary,1,VAR-Ridge,52,tie,tie,no change,tie,tie,no change,False,False,False
+JAPAN,primary,3,VAR-Ridge,52,tie,tie,no change,tie,tie,no change,False,False,False
+JAPAN,primary,6,VAR-Ridge,52,tie,tie,no change,tie,VAR,tie → VAR,False,True,True
+JAPAN,primary,12,VAR-Ridge,52,tie,tie,no change,tie,tie,no change,False,False,False
+UK,primary,1,ARIMA-VAR,45,ARIMA,ARIMA,no change,ARIMA,ARIMA,no change,False,False,False
+UK,primary,1,ARIMA-Ridge,45,tie,tie,no change,tie,ARIMA,tie → ARIMA,False,True,True
+UK,primary,1,VAR-Ridge,45,Ridge,tie,Ridge → tie,Ridge,tie,Ridge → tie,True,True,True
+UK,primary,3,VAR-Ridge,45,Ridge,tie,Ridge → tie,Ridge,Ridge,no change,True,False,True
+UK,primary,6,VAR-Ridge,45,tie,tie,no change,tie,Ridge,tie → Ridge,False,True,True
+UK,primary,12,VAR-Ridge,45,tie,tie,no change,tie,tie,no change,False,False,False
+GERMANY,primary,1,ARIMA-VAR,45,tie,tie,no change,ARIMA,ARIMA,no change,False,False,False
+GERMANY,primary,1,ARIMA-Ridge,45,tie,tie,no change,tie,tie,no change,False,False,False
+GERMANY,primary,1,VAR-Ridge,45,tie,tie,no change,Ridge,Ridge,no change,False,False,False
+GERMANY,primary,3,VAR-Ridge,45,tie,tie,no change,tie,tie,no change,False,False,False
+GERMANY,primary,6,VAR-Ridge,45,tie,tie,no change,tie,tie,no change,False,False,False
+GERMANY,primary,12,VAR-Ridge,45,tie,tie,no change,tie,tie,no change,False,False,False
+USA,secondary,1,ARIMA-Ridge,52,tie,tie,no change,tie,tie,no change,False,False,False
