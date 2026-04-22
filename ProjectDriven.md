@@ -4319,3 +4319,135 @@ Phase 8 directives derived from Phase 7 (for `findings.md` assembly):
     forecasting project."
 
 ---
+
+---
+
+### D-081 | `findings.md` Narrative Emphasis Commitment — N1/N2/N3 Three-Layer Framing
+
+**Date:** Phase 8 · Deliverable #1 (`findings.md` draft)
+
+**Decision:** `docs/findings.md` is written to three specific narrative
+emphasis choices that are non-obvious from the D-078 / D-079 / D-080
+evidence set alone, and that commit the portfolio to a particular reading
+of the Phase 7 revision. The three commitments are:
+
+1. **N1 headline placement.** The "ARIMA h=1 univariate dominance"
+   finding is placed *inside* the N1 section as the portfolio-memorable
+   headline, with the post-COVID-trim three-cell signed result
+   (USA h=1 vs VAR p=0.044, USA h=1 vs Ridge p=0.001, UK h=1 vs VAR
+   p=0.024) as the evidential anchor. The "geography of layer
+   differentiation" framing is treated as supporting analysis within
+   N1 rather than as the primary claim.
+
+2. **N2 cross-lens match elevation.** The VAR IRF peak −0.149 at h=4
+   (D-056) ↔ Ridge first_diff POLICY_RATE_lag3 coefficient −0.136
+   (D-067, D-071) match is positioned in `findings.md` as **"the
+   project's strongest monetary-transmission signal"** — hierarchically
+   ahead of D-070's 12/16 MASE finding. D-070 remains factually intact
+   (per D-079) but is recast as a secondary claim bounded by the
+   COVID-era caveat.
+
+3. **N3 nine-lens formalisation.** D-072's septuple-confirmed framing
+   is formally upgraded to **nine-lens triangulation** in `findings.md`,
+   adding the Phase 7 DM-null pattern (D-078) and the post-trim
+   JAPAN h=6 VAR-Ridge robust-DM flip (D-079) as the 8th and 9th
+   lenses. The ordering in `findings.md` is by the phase in which each
+   lens materialised, producing a cross-phase audit narrative rather
+   than a thematic grouping.
+
+A closing "three-lens methodology match" section is added to
+`findings.md` to operationalise the cross-lens triangulation
+methodology as the project's core analytical defensibility claim, with
+D-056, D-067 / D-071, and D-078 as the three lenses.
+
+**Rationale:**
+
+1. **Narrative choices are not derivable from the audit CSVs alone.**
+   A portfolio reader auditing `ProjectDriven.md` can verify that
+   D-078, D-079, and D-080 record the Phase 7 evidence. The choice of
+   *which* finding to elevate to the N1 headline, and *which* framing
+   to use for N2 and N3, is an act of analytical judgment that sits
+   on top of the audit trail. Recording the choice explicitly
+   preserves evidence-to-conclusion alignment against future
+   misreading (e.g. a reader reconstructing the pre-Phase-7 "Ridge
+   dominant" narrative from D-070 alone would not know that Phase 7
+   evidence rebalanced it).
+
+2. **ARIMA h=1 dominance is the single most substantive Phase 7
+   directional change.** Per D-079, the USA h=1 ARIMA-Ridge shift
+   from p = 0.135 to p = 0.001 under a six-origin trim is a
+   nine-order-of-magnitude change — the largest verdict shift in the
+   25-cell battery. Placing it as the N1 headline (rather than burying
+   it inside a geography discussion) reflects evidential weight.
+
+3. **N2 hierarchical framing protects D-070 while centering the
+   cross-lens match.** The project's strongest surviving
+   monetary-transmission claim is the two-lens coefficient-level match,
+   not the forecast-level DM result (per D-079). Elevating the
+   coefficient-level match as N2's primary claim and framing D-070
+   / D-079 as the narrower forecast-level qualifier is the
+   intellectually honest ordering.
+
+4. **N3 nine-lens upgrade is evidence-proportionate.** D-072 formalised
+   the septuple at Phase 6 Step 3 closeout, using lenses from Phases
+   3–6. Phase 7 produced two new lenses (DM-null pattern across all 6
+   Japan cells under standard DM; JAPAN h=6 post-trim robust-DM flip
+   unique to Japan). Leaving N3 at septuple would under-report the
+   accumulated evidence. The octuple option (adding only DM-null) was
+   considered and rejected — see Alternatives Considered.
+
+5. **Cross-lens methodology match belongs in `findings.md`, not
+   `methodology.md`.** The three-lens match (D-056 ↔ D-067/D-071 ↔
+   D-078) is both a substantive empirical finding (the three values
+   agree) *and* a methodology demonstration (three mathematically
+   independent tests converging). Placing it in `findings.md` as the
+   closing section anchors the empirical value; `methodology.md`
+   records the template for reproducing the match pattern.
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| No decision record (treat as pure packaging) | Rejected — three commitments involve substantive narrative prioritisation that affects portfolio positioning; downstream artefacts (one-pager, README, LinkedIn post) propagate the same choices and benefit from a shared audit anchor |
+| Split into D-081 (N1/N2) + D-082 (N3 nine-lens formalisation) | Rejected — the three commitments are a single emphasis-commitment act on the same document; splitting would introduce a spurious decision-count inflation for audit purposes |
+| N3 upgrade to octuple (adding DM-null pattern only, not the h=6 post-trim flip) | Rejected — the post-trim robust-DM flip is a Japan-unique pattern (not present in any other country) and is independent of the DM-null evidence; including both as separate lenses is evidence-proportionate |
+| N1 headline placed in § 5 closing instead of inside N1 | Rejected — placing the surprise finding in a closing section rather than in the N1 body would bury the most substantive Phase 7 directional change under the supporting analysis |
+| Defer the commitment to `methodology.md` | Rejected — `methodology.md` documents process and template; narrative emphasis is a `findings.md`-scope decision |
+
+**Implementation:**
+
+- `docs/findings.md` sections committed:
+  - § 1 Introduction — roadmap previewing N1 → N2 → N3 → three-lens closing
+  - § 2 N1 — ARIMA h=1 dominance headline placement
+  - § 3 N2 — cross-lens match elevation with D-070 as secondary
+  - § 4 N3 — nine-lens numbered enumeration with phase-ordered lenses
+  - § 5 Closing — three-lens methodology match documentation
+- `docs/methodology.md` — authored by methodology lead; three-lens
+  methodology-match section recorded there as the template from which
+  `findings.md` § 5 derives its empirical instance
+- `outputs/portfolio/P3_onepager.pdf` — 3 bullets propagate the same
+  N1 / N2 / N3 emphasis
+- `README.md` — Key Findings numbered section propagates the same
+  emphasis under headings "ARIMA h=1 Univariate Dominance",
+  "Ridge Architectural Advantage is COVID-Era-Specific", and
+  "Japan's Structural Uniqueness, Nine-Lens Triangulated"
+- `phase7_summary.md` signature-findings list #1, #2, #5 aligns to
+  the N1 / N2 / N3 emphasis respectively
+
+**Propagation:**
+
+- `ProjectDriven.md` appended through D-081 (total 81 decisions;
+  D-020 remains a historical vacancy per D-075 rationale).
+- `README.md` Decision Log Pointer updated: "81 decisions (D-001
+  through D-081, with D-020 as a historical vacancy)."
+- `findings.md`, one-pager, README Key Findings section, and LinkedIn
+  post draft all cite D-081 as the narrative-emphasis anchor decision.
+- D-072 (N3 septuple formalisation) remains unamended in place;
+  D-081 records the upgrade to nine-lens rather than retroactively
+  editing D-072.
+
+**Audit:** No new CSV. The decision record itself is the audit
+artefact. Cross-references: D-056, D-062, D-067, D-070, D-071, D-072,
+D-078, D-079, D-080.
+
+---
