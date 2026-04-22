@@ -3349,3 +3349,63 @@ the git commit introducing these changes plus this decision entry.
 
 ---
 
+### D-075 | `src/` v0.5.0 Architectural Assessment — ProjectScope §12 Blueprint vs D-063 Evidence Rule
+
+**Date:** Phase 6 closure (post-Step 3, pre-Phase 7 DM pre-flight)
+
+**Decision:** Resolve the tension between two simultaneously-binding architectural principles — the ProjectScope §12 `src/` blueprint (immutable pre-implementation specification) and D-063's evidence-driven promotion rule (empirical 4× duplication threshold) — via a **split promotion plan** rather than a single bulk module-assembly bump. The plan consists of:
+
+**Tranche 1 — `src/evaluation.py` at v0.4.3 (patch), executed immediately preceding Phase 7 DM pre-flight.**
+
+Create `src/evaluation.py` as a new module populated with the loss-function and Diebold-Mariano primitives that Phase 7 is about to consume: `rmse()`, `mae()`, `mase()`, `diebold_mariano()` in three variants (standard squared-error, HAC-robust, robust-metric), and a small set of helper adapters that convert the Phase 6 OOS forecast CSVs (`phase6_step{1,2,3}_*_oos_*.csv`) into the matched-terms arrays DM requires. Promotion at v0.4.3 is **predictive** rather than retrospective — Phase 7 is budgeted at four or more sub-step scripts (DM standard, DM HAC variance, DM robust-metric sensitivity, COVID-origin-excluded sensitivity per D-061), all of which will import the same primitive set. Under D-063's 4× rule, the threshold is therefore projected to be satisfied before the first Phase 7 script runs; writing the primitives into scratch first and promoting later would require four immediate rewrites the following week, with regression risk on immutable DM outputs. Additionally `src.modelling_utils.VAR_MASE_D060` (promoted at v0.4.2 per D-074) is expected to be referenced by `src.evaluation.mase()` as the canonical VAR scale denominator when comparing ARIMA / VAR / Ridge on matched terms — the two modules will integrate cleanly under the D-063 narrow-utilities convention.
+
+**Tranche 2 — `src/models/{arima_model,var_model,ridge_model}.py` at v0.5.0 (minor), deferred to Phase 7 closeout for re-assessment.**
+
+The three `src/models/` files specified by ProjectScope §12 are **not** promoted at Phase 6 closure. Current duplication of model-fitting patterns across the Phase 6 Step {1, 2, 3} scratch orchestrators is ≤ 2× per pattern (each of SARIMA fit, VAR fit with Cholesky + D-030 exog, and Ridge Pipeline fit lives in at most two scripts that write immutable audit CSVs). This does not meet D-063's 4× threshold. Furthermore, Phase 7 DM **consumes pre-computed forecast CSVs** rather than re-fitting any model — there is no mechanical pressure during Phase 7 to re-materialise the fitting logic. The v0.5.0 decision is therefore deferred to Phase 7 closeout, at which point one of two outcomes will have obtained:
+
+- If new duplication evidence accumulates (e.g. Phase 8 interpretability work requiring model re-fits for robustness), `src/models/` is materialised as a genuine v0.5.0 minor bump with structural subdirectory reorganisation.
+- If no new duplication evidence emerges, the `src/models/` blueprint entries are treated as an **aspirational reference** in the portfolio audit — the README explicitly records the diff between blueprint and implemented state, with D-075 as the principled justification for not force-filling the blueprint. This is not a compromise but a deliberate methodology choice: the portfolio is stronger for having a logged architectural decision than for having a structurally conformant but empirically unjustified abstraction layer.
+
+**Rationale:**
+
+1. **Simultaneous honouring of two legitimate architectural principles.** ProjectScope §12 is an immutable blueprint written before implementation — it specifies an intent about what the eventual repository should contain. D-063 is an empirical promotion rule written after Step 2 observed 4–6× duplication — it specifies a discipline about when a module should be extracted. Both are binding on Phase 6 closure; neither is subordinate to the other. Force-filling §12 immediately would violate D-063 for three of four files; refusing to materialise §12 at all would treat a project-scope commitment as if it were optional. The split plan honours both by moving on the single file (`evaluation.py`) for which D-063's threshold is **predictively** satisfied, and deferring the three files for which the threshold is empirically unmet while committing to revisit them. This is the same pattern used throughout the project — decisions are specific and empirically grounded, not doctrinal.
+
+2. **Phase 7 execution realism.** If `src/evaluation.py` does not exist at Phase 7 entry, the first DM sub-step script must inline RMSE / MAE / MASE / DM implementations. With four or more Phase 7 scripts on the runway — DM standard, DM HAC, DM robust-metric, and the COVID-origin-excluded sensitivity mandated by D-061 — this inline logic will duplicate 4× by the end of Phase 7 week one, and D-063 will then force a promotion under regression-risk conditions (the audit CSVs will already exist). Pre-building at v0.4.3 **before** the first script runs eliminates the eventual refactor, eliminates the regression risk, and lets Phase 7 scratch scripts be thin orchestrators from the start — matching the pattern that worked cleanly for Phase 6 Step 3 where `modelling_utils` was extended at v0.4.2 before the notebook-08 write-up (D-074).
+
+3. **Semver discipline.** Separating Tranche 1 and Tranche 2 preserves semver cleanness: v0.4.3 is a patch bump (new API added, no existing API modified), while v0.5.0 is a minor bump that may involve structural reorganisation (the `src/models/` subdirectory introduces a new package layer). Bundling them forces v0.5.0 on a release that contains no breaking change, inflating the version number without corresponding interface impact. The conservative v0.4.1 → v0.4.2 → v0.4.3 progression (each a patch bump promoting narrow utilities on evidence) is a deliberate audit trail — readers of the version history can see the evidence-threshold rule in operation across three successive Phase 6 sub-steps, which is itself a portfolio demonstration.
+
+4. **Portfolio audit value — the tension is the artefact.** Reviewing this project, an external reader is not primarily evaluating whether the repository matches a pre-written blueprint — they are evaluating the analyst's judgement about **when blueprints should be honoured and when they should be deferred**. A repository that perfectly matches ProjectScope §12 at Phase 6 closure — with three thin `src/models/*.py` modules each wrapping a single model-fit pattern — would violate D-063 silently and display poor engineering taste (premature abstraction). A repository that ignores §12 without record would display poor project-management discipline (scope drift unreported). The split plan, logged as D-075 with both tranches articulated and the deferral justified against empirical evidence, is the stronger portfolio position than either extreme. The reader sees the analyst negotiating between two principles rather than mechanically applying one.
+
+5. **Evidence-driven restraint under aspirational blueprint pressure.** D-075 explicitly names and applies a portfolio-level principle that has been implicit in the project since D-047 (EDA scratch scripts not promoted), D-063 (Step 2 VAR-fit logic deliberately left in scratch), and D-073 (Step 3 Ridge-fit logic deliberately left in scratch): *code is promoted to `src/` when empirical duplication demonstrates it is the right unit of reuse, not when a pre-implementation document listed the filename.* Recording this principle at Phase 6 closure — when the project transitions from implementation to evaluation — terminates any implicit expectation that Phase 7 or Phase 8 should retrofit `src/models/` to close the diff. The `src/models/` entry in ProjectScope §12 remains on the record as a pre-implementation intent that empirical evidence has not supported; closing that gap is not the project's job unless evidence arrives.
+
+**Alternatives Considered:**
+
+| Option | Summary | Verdict |
+|---|---|---|
+| **A** — Execute full v0.5.0 at Phase 6 closure: build `src/models/{arima,var,ridge}_model.py` × 3 + `src/evaluation.py` together | Symmetric and fast to describe. Rejected — the three `src/models/` files violate D-063 (≤ 2× duplication observed, not 4×); each would be a premature abstraction. Phase 7 DM does not refit models, so no new duplication evidence will accumulate to justify them. |
+| **B** — Defer everything to Phase 7 closeout; keep `src/` at v0.4.2 through Phase 7 | Retains semver cleanness via maximal deferral. Rejected — obligates Phase 7 to inline DM primitives in the first sub-step script; guaranteed 4× duplication by end of Phase 7 week one; promotion would then execute under regression-risk conditions on immutable audit CSVs. Treats ProjectScope §12 `src/evaluation.py` as silently optional. |
+| **C (adopted)** — Split: `src/evaluation.py` at v0.4.3 before Phase 7; `src/models/` deferred to Phase 7 closeout with v0.5.0 reserved for the re-assessment | Honours both §12 and D-063 simultaneously, on a per-file basis. Accepts that the two principles pull in different directions and that the right resolution is disaggregated rather than bulk. **Adopted.** |
+| **D** — Fold `evaluation.py` logic into `modelling_utils.py`; do not create a separate module | Compact. Rejected — ProjectScope §12 explicitly names `src/evaluation.py` as a blueprint entry; merging it into `modelling_utils` creates a gratuitous diff against §12 and muddles module scope (`modelling_utils` is a Phase 6 shared-utilities module per D-063; `evaluation.py` is a Phase 7 model-agnostic metrics module). The two should remain distinct and will integrate via explicit imports. |
+| **E** — Execute `src/models/` now but at v0.4.4 (patch) to avoid semver noise | Rejected on two grounds: (i) adding a new `models/` subdirectory is a structural change that warrants a minor bump, not a patch; (ii) the empirical promotion evidence is absent regardless of semver label. The label-manipulation does not fix the underlying D-063 violation. |
+
+**Implementation:**
+
+No code change is executed in the D-075 record itself. D-075 is a **declarative commitment** binding future phases:
+
+- Phase 7 pre-flight (next gate) will open with the creation of `src/evaluation.py` and the v0.4.3 `src/__init__.py` bump. That execution will be recorded as D-076+ with full API surface, alternatives, and audit reference at the time of implementation.
+- The v0.5.0 `src/models/` decision will be revisited at Phase 7 closeout with explicit reference back to D-075. Whichever branch obtains (material promotion vs aspirational-reference acceptance), a D-0XX record will close the item.
+
+**Audit:**
+
+No new CSV. The decision record itself is the audit trail. Cross-references: D-047 (EDA scratch-only precedent), D-063 (evidence-driven promotion rule and 4× threshold), D-073 (Phase 6 Step 3 closeout amendment), D-074 (v0.4.2 extension as empirical demonstration of D-063 in operation), ProjectScope §12 (immutable blueprint specification).
+
+**Propagation:**
+
+- `README.md` "`src/` Reusable Module Architecture" section updated to v0.4.2 current state, with v0.4.3 and v0.5.0 plans noted and the ProjectScope §12 blueprint diff explicitly recorded.
+- `README.md` "Next Steps" section rewritten to position Phase 7 pre-flight as Tranche 1 execution (`src/evaluation.py`) alongside DM scripts.
+- `README.md` Decision Log Pointer and narrative notebook tree updated to reference `notebooks/09_evaluation_interpretation.ipynb` as ProjectScope §12 specified and Phase 7/8 pending.
+- Decision Log Pointer updated to "74 decisions (D-001 through D-075, with D-020 as a historical vacancy — see D-075 rationale for acceptance of evidence-driven restraint on retroactive renumbering)."
+- Phase 7 pre-flight scope design (new turn) will open with D-075 as a pre-condition and will produce the Phase 7 DM `src/evaluation.py` API surface + sub-step script plan.
+
+---
+
