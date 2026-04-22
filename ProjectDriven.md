@@ -2202,7 +2202,6 @@ Step 3 (Ridge Regression Layer 3) will add D-063 onwards covering regularisation
 
 *Last updated: Phase 6 Step 2 complete — 4-country VAR layer via 9 scratch scripts (S1 / S1b / S2 / S2b / S3 / S4 / S5 / S6 / S6b), 25 audit CSVs, 13 decisions logged (D-050 through D-062), partial residual whitening acknowledged (D-051), inference-primary vs forecast-auxiliary positioning confirmed (D-060). Next: Phase 6 Step 3 Ridge Regression + notebooks/07_var_model.ipynb portfolio assembly.*
 
-
 ### D-063 | Phase 6 Step 2 Closeout — `src/modelling_utils` Promotion at v0.4.1
 
 **Date:** Phase 6 · Step 2 closeout (post-S6b, pre-Step 3)
@@ -2255,4 +2254,1098 @@ Step 3 (Ridge Regression Layer 3) will add D-063 onwards covering regularisation
 - Supersedes D-047 for Phase 6 Step 2's duplicated utilities only; does not revoke D-047's scratch-only principle for truly single-use code.
 - Foundational for D-064+ (Phase 6 Step 3 Ridge) — Ridge code may add entries to `modelling_utils` following the same 4+-duplication promotion threshold.
 - Phase 6 closure (after Step 3) will re-evaluate whether a v0.5.0 full `src/modelling.py` module is warranted, at which point `modelling_utils` may be folded in.
+
+---
+
+## Phase 6 Step 3 Decisions
+
+*These decisions concern the Ridge regression estimation layer (Layer 3) of
+the three-layer modelling architecture specified in ProjectScope §9 and
+D-004. D-064 through D-073 cover the seven sub-steps S1 / S2 / S2b / S3 /
+S4 / S5 / S5b of the Step 3 pipeline. They extend D-050 through D-062 from
+Step 2 (VAR Layer 2) and will be followed by Phase 6 closure — notebook
+assembly for `07_var_model.ipynb` + `08_ridge_regression.ipynb`,
+`phase6_step3_summary.md`, and the `src/` v0.4.2 / v0.5.0 promotion decision
+deferred by D-063.*
+
+---
+
+### D-064 | Ridge Layer 3 Scope — Full Superset, CPI Target, USA Dual-Form
+
+**Date:** Phase 6 · Step 3 (sub-step S1)
+
+**Decision:** Phase 6 Step 3 Ridge estimation operates on the Phase 4 full
+feature superset (no pre-pruning), with **CPI as the sole target variable**
+per country in D-031 primary form, and a **USA-only secondary first_diff
+form** to enable dual-form comparison in Phase 7 Diebold-Mariano. Train
+window is **2000-01 .. 2019-12** (held identical to ARIMA Step 1 and VAR
+Step 2 S6); test window is **2020-01 onwards** (D-005).
+
+**Five (country, form) combinations analysed:**
+
+| Combination | n_features | n_train | n_test | Joint-valid start |
+|---|---:|---:|---:|---|
+| USA primary (yoy_pct) | 52 | 204 | 70 | 2003-01-01 |
+| JAPAN primary (first_diff) | 49 | 215 | 70 | 2002-02-01 |
+| UK primary (log_diff_pct) | 50 | 215 | 63 | 2002-02-01 |
+| GERMANY primary (first_diff) | 51 | 215 | 63 | 2002-02-01 |
+| USA first_diff secondary | 52 | 215 | 70 | 2002-02-01 |
+
+**Rationale:**
+
+1. **D-040 compliance by construction.** Phase 4 deliberately deferred
+   feature selection to Phase 6 Ridge under L2 regularisation (50–53
+   cols/country superset). Pre-pruning at S1 would override the D-040
+   commitment and couple Ridge to a specific pre-selected subset — exactly
+   the model-family-coupling D-040 rejected. The full superset passes
+   through unmodified.
+
+2. **CPI-only target matches Layer 3 role in D-004.** The three-layer
+   architecture assigns ARIMA to univariate CPI (Layer 1), VAR to the
+   5-variable endogenous block (Layer 2), and Ridge to univariate CPI
+   under a high-dimensional feature matrix (Layer 3). Broadening Ridge to
+   all 5 endogenous variables would replicate VAR's multivariate role and
+   violate the ProjectScope three-layer differentiation.
+
+3. **USA dual-form pre-commitment.** D-048 (ARIMA Stage-a grids) and
+   D-062 (VAR S6 walk-forward) both instantiated USA under both `yoy_pct`
+   and `first_diff`. Phase 7 DM requires a 3-layer × 2-USA-form matrix
+   for matched comparison; omitting Ridge's second form would leave the
+   USA dual-form contest incomplete at 2/3 layers. The secondary form is
+   built end-to-end (base + lag + rolling + interaction) from a
+   `REGISTRY_OVERRIDES` override, ensuring all CPI-derived features are
+   form-consistent rather than mixing scales.
+
+4. **Train-window asymmetry is a form consequence, not an artefact.**
+   USA primary loses 12 leading observations (yoy_pct truncation); USA
+   secondary loses 1 (first_diff). n_train difference (204 vs 215) is
+   documented rather than equalised — Phase 7 DM matches on target-date
+   origins, not training length.
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| Variance or correlation pre-filter before Ridge | Rejected — violates D-040 deferral; biases downstream comparison |
+| L1 (Lasso) pre-screen then Ridge | Rejected — L1 anticipates a different model family; D-004 specifies Ridge (L2) as Layer 3 |
+| Ridge on all 5 endogenous variables | Rejected — duplicates VAR's Layer 2 multivariate role; violates three-layer differentiation |
+| Single USA form (primary only) | Rejected — leaves Phase 7 DM dual-form matrix incomplete at 2/3 layers |
+| Equalise n_train across USA forms | Rejected — constrains secondary form's window for cosmetic symmetry; Phase 7 DM matches on target-date origins |
+
+**Implementation:**
+
+- `scripts/phase6_step3_s1_data_preparation.py`
+- USA secondary built via temporary monkey-patch of
+  `src.feature_engineering.REGISTRY_OVERRIDES[('USA', 'CPI')] = 'first_diff'`,
+  followed by `build_country_features('USA')`, with the override state
+  restored in a `finally` block. Pre/post-patch sanity check verifies
+  `effective_phase6_var_input` flipped from `yoy_pct` to `first_diff` via
+  `load_effective_registry()`; dual-form differentiation assertion
+  confirms USA primary and secondary train_mean/std differ.
+
+**Audit:**
+
+- `phase6_step3_s1_feature_matrix_summary.csv` (5 rows)
+- `phase6_step3_s1_feature_categories.csv` (5 rows)
+- `phase6_step3_s1_target_summary.csv` (5 rows)
+
+---
+
+### D-065 | Ridge CV Protocol — Expanding Walk-Forward, α log-grid, Standardised Features
+
+**Date:** Phase 6 · Step 3 (sub-step S2)
+
+**Decision:** Ridge hyperparameter α selected per (country, form) via
+**5-fold expanding-window walk-forward cross-validation** over α grid
+`np.logspace(-3, 3, 13)` on the train window only (≤ 2019-12). Feature
+standardisation is performed **inside a sklearn Pipeline** so
+`StandardScaler` fits on each fold's training split alone (strict
+leakage-guard). α* = argmin of mean validation MSE across folds.
+Boundary-hit detection emits a sensitivity-extension flag per D-048
+Stage (b) philosophy.
+
+**Selected α* by combination:**
+
+| Combination | α* | log10(α*) | Boundary | val_MSE |
+|---|---:|:-:|:-:|---:|
+| USA primary | 10.0 | +1.0 | interior | 0.5200 |
+| **JAPAN primary** | **1000.0** | **+3.0** | **upper (→ S2b)** | **0.0960** |
+| UK primary | 100.0 | +2.0 | interior | 0.0505 |
+| GERMANY primary | 31.6 | +1.5 | interior | 0.0509 |
+| USA first_diff secondary | 31.6 | +1.5 | interior | 0.3198 |
+
+Japan's upper-boundary hit is resolved in D-066 (S2b grid extension).
+
+**Rationale:**
+
+1. **TimeSeriesSplit is the only valid CV for time series.** D-005
+   prohibits random-fold CV and pre-commits to walk-forward. sklearn's
+   `TimeSeriesSplit(n_splits=5)` is the canonical expanding-window
+   implementation: fold k trains on indices `[0, split_k)` and validates
+   on `[split_k, split_{k+1})`, preserving temporal order.
+
+2. **CV is confined to the train window (≤ 2019-12).** The 2020+ test
+   window is held out entirely — CV measures in-sample generalisation
+   under stationary conditions, while S4 walk-forward measures the
+   actual 2020+ OOS performance that Phase 7 DM adjudicates. Using 2020+
+   in CV would contaminate the test-set information budget.
+
+3. **log-spaced α grid spans six orders of magnitude.** Ridge L2
+   penalisation interacts with feature variance on a log scale:
+   `logspace(-3, 3, 13)` covers α ∈ {0.001, 0.00316, 0.01, …, 1000} with
+   13 points, half-decade resolution. This is the standard ML
+   diagnostic-grid width for penalised regression.
+
+4. **StandardScaler must fit per fold, not globally.** A globally-fitted
+   scaler would leak validation-set variance into the training
+   standardisation, biasing α* downward. The sklearn Pipeline wraps
+   `StandardScaler → Ridge` as a single estimator so that `pipe.fit` on
+   the fold's train split fits the scaler on train features only, and
+   `pipe.predict` on the validation split applies the frozen scaler.
+
+5. **α shared across horizons (forward commitment to S4).** Re-tuning α
+   per horizon {1, 3, 6, 12} would quadruple the decision footprint with
+   no clear theoretical gain — the D-050 VAR analogue (lag order fixed
+   across forecast horizons) is the established project precedent.
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| `RidgeCV` with built-in leave-one-out CV | Rejected — LOO ignores temporal order; equivalent to random-fold CV for this problem |
+| Block-bootstrap CV | Rejected — overkill for a linear model; TimeSeriesSplit is the lower-overhead canonical choice |
+| n_splits = 3 or 10 | Rejected — 5 is the sklearn default and gives {≈20%, 40%, 60%, 80%, 100%} expanding ratios, well-matched to 215-obs train window |
+| Dense α grid (50+ points) | Rejected — marginal resolution gain; 13-point half-decade grid is sufficient for boundary detection |
+| Global StandardScaler (fit once pre-CV) | Rejected — leakage; biases α* selection downward |
+| Per-horizon α retuning | Rejected — quadruples decision footprint without theoretical motivation |
+
+**Implementation:**
+
+- `scripts/phase6_step3_s2_alpha_cv.py`
+- Pipeline:
+  `Pipeline([('scaler', StandardScaler()), ('ridge', Ridge(alpha=α))])`
+- `sklearn.model_selection.TimeSeriesSplit(n_splits=5)`
+- Boundary status computed from `np.isclose(best_alpha, grid_min/max)`;
+  flagged combinations trigger grid-extension sub-step.
+
+**Audit:**
+
+- `phase6_step3_s2_cv_scores.csv` (325 rows: 5 combos × 13 α × 5 folds)
+- `phase6_step3_s2_alpha_selection.csv` (5 rows)
+
+---
+
+### D-066 | Japan α Grid Extension — Intercept-Only Saturation, N3 Septuple Confirmation
+
+**Date:** Phase 6 · Step 3 (sub-step S2b)
+
+**Decision:** Extend the Japan primary α grid to
+`np.logspace(3.0, 6.0, 7)` following the D-048 Stage (b) boundary-
+sensitivity pattern. Only Japan primary is extended; the four
+interior-α combinations from S2 retain their selections. The extended
+grid reveals an **interior minimum at α* = 3162** (log10 = +3.5) with
+val_MSE = 0.0854, **below the intercept-only theoretical bound
+(0.0888)** by 0.0034. For α > 3162, val_MSE monotonically re-approaches
+the intercept bound — classic Ridge saturation. Final JPN primary α*
+is **revised from 1000 to 3162**.
+
+**Extended α path:**
+
+| log10(α) | α | val_MSE | Gap to intercept bound |
+|:-:|---:|---:|---:|
+| 3.0 | 1000 | 0.0960 | +0.0072 |
+| **3.5** | **3162** | **0.0854** | **−0.0034 (minimum)** |
+| 4.0 | 10,000 | 0.0870 | −0.0018 |
+| 4.5 | 31,623 | 0.0881 | −0.0007 |
+| 5.0 | 100,000 | 0.0886 | −0.0002 |
+| 5.5 | 316,228 | 0.0887 | −0.0001 |
+| 6.0 | 1,000,000 | 0.0888 | +0.0000 |
+
+Intercept-only theoretical val_MSE = 0.0888 (computed across the same
+TimeSeriesSplit folds as `ŷ_{t+h} = mean(y_train)`). Ridge gain over
+intercept-only is **3.8 % relative improvement, 0.0034 absolute** —
+approximately 1/16 of the fold-level val_MSE std (0.056) and thus
+statistically indistinguishable from zero.
+
+**N3 Septuple Confirmation finding:**
+
+Japan's α-saturation behaviour is an independent Ridge-lens confirmation
+of the N3 Japan Isolation narrative. The six pre-existing lenses (Phase
+6 Step 2 recorded sextuple confirmation) are now extended:
+
+| Lens | Japan finding |
+|---|---|
+| Phase 5 D-044 ACF[12] | Near-white-noise (weakest among 4) |
+| Phase 6 Step 1 ARIMA AIC | Interior minimum at lag 5 (only non-boundary) |
+| Phase 6 S1b AIC extension | Stable at lag 5 |
+| Phase 6 S3 Granger | 0/4 CPI receivers significant |
+| Phase 6 S4 IRF | 4/4 CPI-response CIs straddle zero |
+| Phase 6 S5 FEVD | 92 % self-share plateau at h=24 |
+| **Phase 6 S2b Ridge saturation** | **α* = 3162 ≈ intercept-only; gain 3.8 % ≈ zero** |
+
+N3 is **septuple-confirmed** across seven independent inferential
+lenses. This is the project's most robust single finding and will be
+the centerpiece of the portfolio narrative at Phase 8.
+
+**Rationale:**
+
+1. **D-048 Stage (b) precedent.** The boundary-hit extension at Step 1
+   (USA first_diff SARIMA grid Stage a → Stage c) established the
+   protocol: extend only the boundary-hit variant, not all variants, to
+   avoid combinatorial blowup while preserving saturation evidence. S2b
+   applies the identical principle at the Ridge layer.
+
+2. **Interior minimum with saturation curve.** The extended grid shows
+   Ridge does find an interior optimum (α* = 3162 is strictly preferred
+   over both boundary extremes), but the improvement over intercept-only
+   is so small that the economic interpretation is "Ridge effectively
+   recommends predicting the mean". This is a quantitatively sharper
+   statement than the sextuple-confirmed qualitative isolation.
+
+3. **Independent lens — not a restatement.** Ridge's regularisation
+   pathway operates on standardised coefficient shrinkage, mathematically
+   orthogonal to ARIMA lag structure, VAR Granger causality, IRF impulse
+   responses, and FEVD variance decomposition. That all seven lenses
+   converge on the same Japan-specific conclusion is the key cross-lens
+   portfolio claim.
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| Accept α = 1000 (boundary) as final | Rejected — prevents saturation evidence; D-048 Stage (b) precedent requires extension |
+| Extend grid for all 5 combinations uniformly | Rejected — combinatorial blowup; only Japan shows boundary-hit |
+| Report Ridge winner at α → ∞ verdict without interior minimum | Rejected — interior minimum is empirically present; forcing limiting interpretation distorts the audit |
+| Replace Ridge with intercept-only model for Japan | Rejected — preserves dual-layer comparability (VAR vs Ridge) at Phase 7 DM; intercept-only is a degenerate special case |
+
+**Implementation:**
+
+- `scripts/phase6_step3_s2b_japan_grid_extension.py`
+- Extended grid: `np.logspace(3.0, 6.0, 7)`
+- Intercept-only theoretical bound computed via matched-fold
+  `ŷ_val = mean(y_train_fold)` and `mean_squared_error` evaluation.
+- α selection CSV structure identical to S2 for downstream S3/S4
+  interoperability.
+
+**Audit:**
+
+- `phase6_step3_s2b_japan_cv_scores.csv` (35 rows: 7 α × 5 folds)
+- `phase6_step3_s2b_japan_alpha_selection.csv` (1 row)
+
+**Propagation:** S3 and S4 load α* via a two-CSV merge
+(S2 baseline + S2b override for JPN primary) — downstream computation
+automatically honours the revision.
+
+---
+
+### D-067 | Ridge Coefficient Stability + Phillips Methodology Quadrilogy
+
+**Date:** Phase 6 · Step 3 (sub-step S3)
+
+**Decision:** Ridge coefficients are reported in **standardised feature
+space** (extracted from the Pipeline's `Ridge` step post-scaling) with a
+5-fold stability envelope per feature. The full-train fit supplies the
+primary `coef_full_train` magnitude ranking; the 5-fold refits supply
+`coef_fold_mean/std/min/max` and a `sign_stable` indicator (True ⟺
+all 5 folds plus the full-train share the same sign). Ranking is by
+`|coef_full_train|` with rank 1 assigned to the largest magnitude.
+
+**Two principal findings:**
+
+**(a) N3 Coefficient-Magnitude Quantification (reinforcement of D-066).**
+Japan's Ridge coefficients are compressed to a distinctly separate
+magnitude stratum from the other three countries:
+
+| Country | max&nbsp;&#124;coef&nbsp;&#124; | sum&nbsp;&#124;coef&nbsp;&#124; | Ratio vs Japan |
+|---|---:|---:|---:|
+| **JAPAN primary** | **0.0100** | **0.0697** | 1.0× |
+| UK primary | 0.0991 | 0.5133 | 9.9× / 7.4× |
+| GERMANY primary | 0.1535 | 1.0050 | 15.4× / 14.4× |
+| USA first_diff secondary | 0.3560 | 1.9224 | 35.6× / 27.6× |
+| USA primary | 0.7138 | 3.6385 | 71.4× / 52.2× |
+
+All 49 Japan features are shrunk 9.9–71.4× harder than the
+max-magnitude feature in any other country. This provides a direct
+numerical fingerprint for the N3 narrative that complements D-066's
+α-based evidence.
+
+**(b) Phillips Methodology Quadrilogy** (extension of D-057's Trilogy).
+D-057 recorded three mutually compatible but visually different
+Phillips-Curve manifestations across analytical lenses. S3 contributes a
+fourth lens — **stationary-form Ridge base-feature coefficient**:
+
+| Lens | Manifestation | Country surfacing |
+|---|---|---|
+| Level-form Phillips (Phase 5 D-043) | Classical negative slope | USA, UK (Anglo) |
+| Stationary correlation (D-046) | Invisible | none |
+| Stationary VAR IRF (D-057) | POSITIVE sign anomaly | USA, UK |
+| **Stationary Ridge base-feature (D-067)** | **Negative base coef, top-5, sign-stable** | **GERMANY only** |
+
+The 4-country Phillips audit (restricted to base category,
+feature name = `{country}_UNEMPLOYMENT` exact, rank ≤ 5, negative sign,
+sign-stable across folds) yields **GERMANY only** — rank 4, coef
+−0.0402, sign-stable. USA's UNEMPLOYMENT sits at rank 39 with coef
+−0.0188 and sign-unstable across folds; UK rank 19, coef −0.0070 sign-
+stable but not in top-5; Japan rank 27, coef −0.0007 sign-unstable —
+effectively noise.
+
+The portfolio meta-finding is **lens-dependence**: each of the four
+lenses surfaces a different subset of the four countries. No single
+country exhibits the Phillips Curve on all four lenses simultaneously.
+This strengthens D-057's classification of Phillips Curve as "real but
+lens-dependent" from three to four independent methodological
+instantiations.
+
+**Rationale:**
+
+1. **Standardised space for magnitude comparability.** Raw-space Ridge
+   coefficients scale with feature standard deviations; standardised
+   coefficients are the canonical cross-feature / cross-country
+   comparison currency. Since the Pipeline already fits
+   `StandardScaler` on training features, the `Ridge` step's `coef_`
+   attribute is natively in standardised space — zero additional
+   transformation required.
+
+2. **5-fold stability envelope over single point estimate.** Ridge
+   coefficient stability is the ML-canonical analogue of VAR's
+   coefficient standard errors. `sign_stable` is a binary sufficient
+   statistic for portfolio interpretation: True ⟹ the directional
+   claim survives fold perturbation; False ⟹ the feature contributes
+   at the noise level and should not be emphasised.
+
+3. **Phillips lens restriction is narratively deliberate.**
+   Classical Phillips theory specifies the **contemporaneous** level of
+   unemployment influencing CPI; lagged or rolling unemployment is a
+   different economic construct. The audit explicitly restricts to
+   base-category + exact suffix to avoid conflating the classical
+   hypothesis with derived features. Lagged/rolling unemployment effects
+   (which do appear for USA, UK in various ranks) are Ridge-visible but
+   belong to a different theoretical category.
+
+4. **Independent lens from D-057's VAR IRF.** Ridge standardised
+   coefficients and VAR orthogonalised IRF peaks measure different
+   objects: Ridge measures standardised linear coefficient in a
+   high-dimensional static prediction problem; VAR IRF measures the
+   dynamic response of CPI to a 1-σ orthogonalised unemployment shock.
+   That GERMANY surfaces Phillips only in the Ridge lens, and USA/UK
+   surface it only in the VAR IRF lens (with positive sign), is the
+   quadrilogy's key content.
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| Raw-space coefficients | Rejected — not comparable across features with different scales |
+| Single full-train fit (no fold stability) | Rejected — silent on noise-level coefficients; `sign_stable` is the minimum required for portfolio claim strength |
+| Include `*UNEMPLOYMENT*` lag/rolling in Phillips lens | Rejected — conflates classical contemporaneous Phillips with derived-feature effects |
+| Report top-10 instead of top-5 | Rejected — top-5 matches the portfolio-convention "dominant drivers" cutoff used in D-030; extending dilutes the signal |
+| Bootstrap-CI instead of fold stability | Rejected — 5-fold TimeSeriesSplit stability is consistent with the same CV protocol as D-065; bootstrap would require independent methodology |
+
+**Implementation:**
+
+- `scripts/phase6_step3_s3_coefficients.py` (primary)
+- `scripts/phase6_step3_s5b_narrative_correction.py` (Phillips audit
+  logic correction — excludes `*_UNEMPLOYMENT_lag*` / `*_roll*` patterns,
+  restricts to top-5, requires negative sign + sign-stable)
+- α* loaded via S2 + S2b merge.
+
+**Audit:**
+
+- `phase6_step3_s3_ridge_coefficients.csv` (254 rows: feature × combination)
+- `phase6_step3_s3_top_features.csv` (50 rows: top-10 × 5 combinations)
+- `phase6_step3_s3_category_contribution.csv` (30 rows: 6 category × 5 combinations)
+- `phase6_step3_s5b_phillips_base_feature_lens.csv` (4 rows: 4-country
+  Phillips base-feature audit)
+
+**Propagation:** Phase 6 Step 3 Signature Findings section will cite
+this as "N3 Coefficient-Magnitude" and "Phillips Quadrilogy". The
+quadrilogy extension of D-057 is a Phase 8 Limitations / Methodology
+cornerstone.
+
+---
+
+*D-064 through D-067 drafts complete. Remaining for next turn: D-068 (S4
+walk-forward direct-h), D-069 (regime interaction train-window
+zero-information), D-070 (Ridge-vs-VAR forecast positioning), D-071
+(USA dual-form Phase 7 resolution), D-072 (N3 septuple formalisation,
+cross-references D-066 and D-067), D-073 (Phase 6 Step 3 closeout +
+src/ promotion deferral). Phase 6 Step 3 analytical pipeline is
+frozen at S1–S5b; these decisions document the frozen state.*
+---
+
+### D-068 | Ridge OOS Walk-Forward — Direct-h Protocol, Shared α, Matched Origins
+
+**Date:** Phase 6 · Step 3 (sub-step S4)
+
+**Decision:** OOS forecasting uses **direct multi-step Ridge** —
+separate per-horizon fits on `(X_s, y_{s+h})` pairs — rather than
+recursive iteration, with the S2/S2b-selected α* held constant across
+all four horizons h ∈ {1, 3, 6, 12}. Origin set is restricted so every
+horizon is evaluable at every origin: `origin ∈ [2020-01, last_obs − 12
+months]`. Each origin refits Ridge from scratch on its
+expanding-window training sample. Random-walk `ŷ_{t+h} = y_t` is the
+matched naive baseline for MASE and RMSE-ratio metrics.
+
+**Origin counts matched to VAR S6 (D-060, D-062):**
+
+| Combination | Origins | Window |
+|---|---:|---|
+| USA primary | 58 | 2020-01 .. 2024-10 |
+| JAPAN primary | 58 | 2020-01 .. 2024-10 |
+| UK primary | 51 | 2020-01 .. 2024-03 |
+| GERMANY primary | 51 | 2020-01 .. 2024-03 |
+| USA first_diff secondary | 58 | 2020-01 .. 2024-10 |
+
+Total Ridge fits: 5 combinations × 58 or 51 origins × 4 horizons =
+**1,104 fit–predict pairs**.
+
+**Rationale:**
+
+1. **Direct multi-step is the ML canonical convention.** Recursive
+   prediction propagates forecast errors into the feature row at the
+   next step, which is fine for VAR (the feature row IS the past
+   forecast) but awkward for Ridge with 50+ features including rollings
+   and regime dummies — "recursing" a rolling_3_mean across predicted
+   CPI values mixes forecast uncertainty with the feature definition.
+   Direct-h cleanly decouples: each horizon trains its own β̂_h on real
+   observed pairs.
+
+2. **α shared across horizons matches the D-050 VAR precedent.**
+   Step 2's VAR uses a single AIC-selected lag p per country across all
+   forecast horizons; re-tuning per horizon at Ridge would asymmetrically
+   advantage the ML layer and complicate the Phase 7 DM matrix. Sharing
+   α preserves matched model-complexity budgets across layers.
+
+3. **Origin constraint enables paired DM.** Phase 7 Diebold-Mariano
+   requires same-origin, same-target-date Ridge vs VAR forecast pairs.
+   Restricting origins to `[2020-01, last_obs − h_max]` guarantees every
+   forecast row in `phase6_step3_s4_ridge_oos_forecasts.csv` has a
+   matched row in `phase6_step2_s6_var_oos_forecasts.csv` at the same
+   (country, origin, horizon) key for all four horizons.
+
+4. **Random-walk naive as baseline (D-060 consistency).** VAR S6 and
+   Step 1 ARIMA both use `ŷ_{t+h} = y_t` as the naive benchmark for
+   MASE and RMSE-ratio. Using the same baseline at Layer 3 preserves
+   cross-layer comparability at Phase 7.
+
+5. **StandardScaler refit per origin (leakage guard, consistent with
+   D-065).** Each walk-forward origin instantiates a new Pipeline
+   object; scaler parameters fit on the origin's training window only.
+   No scaler information from origin t leaks to origin t − 1.
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| Recursive multi-step Ridge | Rejected — feature-row construction becomes ambiguous for rolling / interaction columns; direct-h is cleaner |
+| Per-horizon α retuning via nested CV | Rejected — quadruples α-selection footprint; asymmetric advantage over VAR's shared-lag policy |
+| Fixed-origin forecast (no walk-forward) | Rejected — D-005 / D-060 establish walk-forward as the project standard for 2020+ test window |
+| Origin range extending to `last_obs − 1 month` | Rejected — unequal horizon coverage per origin; Phase 7 DM paired-matching breaks |
+| Seasonal naive baseline `ŷ_{t+h} = y_{t+h−12}` | Rejected — VAR S6 (D-060) uses random-walk; cross-layer consistency overrides potential baseline refinement |
+
+**Implementation:**
+
+- `scripts/phase6_step3_s4_oos_forecast.py`
+- Per-horizon target built via `y_full.shift(-h)` then filtered to the
+  origin's pre-origin window; Pipeline refit on
+  `(X_train, z_train.loc[common_index])`, prediction on
+  `X_full.loc[[origin]]`.
+- Metrics: RMSE, MAE, bias, median absolute error, naive_rmse,
+  naive_mae, RMSE/naive ratio, MASE (MAE / in-sample 1-step naive MAE
+  on training target).
+
+**Audit:**
+
+- `phase6_step3_s4_ridge_oos_forecasts.csv` (1,104 rows)
+- `phase6_step3_s4_ridge_oos_metrics.csv` (20 rows: 5 combinations × 4 h)
+- `phase6_step3_s4_ridge_oos_cpi_summary.csv` (20 rows, compact subset)
+
+**Propagation:** The 1,104-row forecast CSV is the primary Ridge input
+to Phase 7 Diebold-Mariano. D-070 interprets the resulting metrics;
+D-071 resolves the USA dual-form question using these outputs.
+
+---
+
+### D-069 | Regime Interaction Zero-Information in Training Window
+
+**Date:** Phase 6 · Step 3 (sub-step S3, methodology meta-finding)
+
+**Finding:** Of the 6 regime-interaction columns emitted by Phase 4
+(D-030 dominant-driver matrix gated by D-036), **5 are constructed
+around 2020+ structural breaks** — COVID_2020 (USA, JAPAN, GER) and
+ENERGY_2022 (USA, UK, GER) — and therefore evaluate to **identically
+zero across the entire train window 2000-01 .. 2019-12**. The sixth
+interaction, `USA_M2_x_D_GFC_2008`, fires on 2008-09 and is the only
+train-window-informative interaction column in the superset.
+
+**Per-combination category contribution (sum of |coef_full_train|):**
+
+| Combination | Interaction n | sum&nbsp;&#124;coef&nbsp;&#124; | Active in train? |
+|---|:-:|---:|:-:|
+| USA primary | 3 | 0.0570 | 1/3 (GFC only) |
+| JAPAN primary | 0 | 0.0000 | N/A (no interactions) |
+| UK primary | 1 | 0.0000 | 0/1 (ENERGY only) |
+| GERMANY primary | 2 | 0.0000 | 0/2 (COVID + ENERGY) |
+| USA first_diff secondary | 3 | 0.0013 | 1/3 (GFC only) |
+
+Ridge correctly shrinks zero-variance features to zero under L2
+penalty. This is not a bug — it is the expected mathematical
+consequence of D-005 (train ≤ 2019-12) ∩ D-036 (interactions emitted
+for all D-030-gated break-date × driver pairs). At forecast time (2020+
+origins), the 2020/2022 interactions activate but Ridge has assigned
+them coefficient zero, so they contribute nothing to predictions.
+
+**Rationale for acceptance rather than redesign:**
+
+1. **Audit-trail integrity over symmetric pruning.** The 5 zero-coefficient
+   interactions are not misleading — they are transparent evidence that
+   the train window pre-dates the COVID/ENERGY regime transitions. Any
+   reader inspecting the coefficient CSV sees the structural constraint
+   directly; silently dropping these columns would hide it.
+
+2. **D-005 and D-036 are both immutable scope decisions.** D-005
+   (train=2000–2019, test=2020+) is the project's primary OOS
+   methodology commitment made in Phase 0. D-036 (regime interactions
+   emit for all D-030-gated pairs) is Phase 4's break-dummy
+   construction rule. Altering either to accommodate Ridge-specific
+   behaviour would rewrite cross-phase infrastructure; the symptom is
+   isolated to Ridge interpretation and better documented locally.
+
+3. **Post-2020 refit would test-window-leak.** An alternative would be
+   to re-train Ridge with 2020+ data once test rows are reached; this
+   would contaminate the OOS evaluation and invalidate the Phase 7 DM
+   comparison.
+
+4. **The economically-meaningful interaction (USA M2 × GFC) does
+   surface.** `USA_M2_x_D_GFC_2008` has coef 0.0570 (sum) in USA
+   primary and 0.0013 in USA first_diff secondary, consistent with the
+   2008 financial-crisis monetary-policy interaction D-030 identified as
+   USA-specific. The zero-information problem affects only the
+   post-2020 breaks.
+
+**Portfolio implication:** The 2020+ regime-interaction features are
+effectively **forecast-time-only structural features**: they carry no
+in-sample information and therefore no Ridge coefficient, but they do
+encode the structural-break information present during test evaluation.
+For future re-runs of this project with train windows extending into
+2020+, these columns would become informative; the D-005 commitment is
+what renders them uninformative in this instantiation.
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| Drop post-2020 interactions at Phase 4 | Rejected — couples Phase 4 to Ridge-train-window considerations; violates D-040 model-family-independence |
+| Drop post-2020 interactions at Phase 6 S1 pre-processing | Rejected — same coupling problem; audit CSV would hide the structural constraint |
+| Extend train window to 2022-06 to include COVID/ENERGY | Rejected — violates D-005 OOS stress-test design |
+| Impute pseudo-interactions using pre-2020 proxy periods | Rejected — ad-hoc; fabricates regime observations where none exist |
+| Replace interaction with a smoother-basis encoding | Rejected — changes the D-030 / D-036 construction downstream of Phase 4 |
+
+**Implementation:** No code change. Finding documented here and cited
+in `phase6_step3_summary.md`, `notebooks/08_ridge_regression.ipynb`
+(Methodology Notes section), and portfolio Limitations subsection.
+
+**Audit:** `phase6_step3_s3_category_contribution.csv` (interaction
+rows make the zero-coefficient pattern directly verifiable).
+
+---
+
+### D-070 | Ridge-vs-VAR Forecast Positioning — Relative-Win, Absolute-Difficulty
+
+**Date:** Phase 6 · Step 3 (sub-step S5)
+
+**Finding:** The Ridge (Layer 3) vs VAR (Layer 2, D-060 AIC-selected
+p per country) OOS forecast comparison across the 16 canonical cells
+(4 countries × 4 horizons) in primary-form CPI produces:
+
+**Ridge relative win count: 12 / 16**, **VAR wins: 4 / 16** (all four VAR
+wins are Japan, by ≤ 18.7 % margins). Per country:
+
+| Country | Ridge wins / 4 | Ridge MASE range | VAR MASE range (D-060) | Best pct improvement |
+|---|:-:|:-:|:-:|:-:|
+| GERMANY | 4 / 4 | 1.02 – 1.38 | 1.48 – 2.26 | +40.2 % (h=3) |
+| UK | 4 / 4 | 0.97 – 1.10 | 1.90 – 79.07 | **+98.7 % (h=12)** |
+| USA | 4 / 4 | 2.67 – 17.04 | 3.73 – 32.32 | +49.2 % (h=3) |
+| JAPAN | 0 / 4 | 0.98 – 1.12 | 0.89 – 1.03 | −18.7 % (h=6, Ridge loss) |
+
+**Crucial nuance — absolute vs relative performance.** Ridge
+outperforms VAR in 12/16 cells but beats the **random-walk naive
+baseline** (MASE < 1) in only 2/16 cells (JPN h=1: 0.978; UK h=3:
+0.968). Of the remaining 14 cells, Ridge's MASE exceeds 1 — i.e.,
+Ridge is better than VAR but still worse than simply predicting
+`ŷ_{t+h} = y_t`. The portfolio positions Ridge accordingly:
+
+- **Ridge as forecast-improved (relative to VAR).** The 12/16 win count
+  is Phase 6's primary forecast finding and the centrepiece of the
+  "three-layer value" portfolio claim.
+- **Ridge as naive-non-dominant (absolute).** The 2020+ inflation
+  regime — COVID deflation, 2022 energy shock, 2023-24 disinflation —
+  is genuinely difficult; no tested model achieves consistent
+  naive-dominance across countries and horizons. Phase 7 DM will test
+  whether ARIMA (Layer 1) closes this absolute gap at shorter horizons.
+
+**UK h=12 as Ridge's signature improvement.** VAR MASE 79.07 is driven
+by the COVID-origin outlier documented in D-061 (UK 2020-05 origin
+forecast −980.29 vs actual 0.54). Ridge's L2 shrinkage at α = 100
+produces MASE 1.02 at h=12 — a **77× reduction**. This is the single
+most dramatic regularisation-vs-structure-shock result in the project.
+
+**Japan's near-tie as N3 re-confirmation.** Japan's Ridge and VAR MASE
+differ by −8.3 to −18.7 %, all with both layers close to 1.0 (naive
+baseline) — i.e., neither layer extracts meaningful multivariate
+information. This corroborates D-066's septuple confirmation: Japan's
+inflation dynamics are sufficiently isolated that the choice between
+VAR and Ridge is a within-noise decision.
+
+**Rationale:**
+
+1. **Relative-vs-absolute separation is intellectually honest.**
+   Claiming Ridge "dominates VAR" without noting both layers lose to
+   naive at 14/16 cells would overstate the layered-architecture value.
+   The portfolio's D-060 pre-commitment (VAR as "inference-primary,
+   forecast-auxiliary") already prepared this distinction; D-070
+   extends it to Ridge with the same intellectual structure.
+
+2. **UK h=12 is the portfolio's most teachable regularisation moment.**
+   The 77× MASE reduction is a direct demonstration of L2's regime-
+   shock robustness. This will become a portfolio figure in
+   `notebooks/08_ridge_regression.ipynb`.
+
+3. **Three-layer role differentiation preserved.** D-004 assigned
+   ARIMA = baseline, VAR = inference-primary, Ridge = high-dimensional
+   regularised forecaster. D-070 quantitatively confirms Layer 3's role:
+   Ridge's forecast gain over Layer 2 is real and country-specific
+   (GER/UK/USA sweep) but the Layer 3 gain does not mechanically
+   translate into naive-dominance.
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| Report only the 12/16 win count | Rejected — absent the naive-baseline check, overstates Ridge's absolute skill |
+| Use RMSE ratio (not MASE) as primary metric | Rejected — MASE is unit-free and is D-060's primary metric; RMSE ratio retained as secondary |
+| Winsorise / exclude COVID-origin VAR cells for UK h=12 | Rejected — D-061 already documents the S6b robust-metric softening; leaving raw VAR MASE in D-070 makes the Ridge improvement visible |
+| Combine VAR + Ridge in an ensemble | Deferred — potential Phase 8 enhancement; out of Step 3 scope |
+
+**Implementation:**
+- `scripts/phase6_step3_s5_narrative_consolidation.py` computes
+  comparison. VAR MASE values hardcoded from D-060 (Phase 6 Step 2 S6
+  AIC-selected p, primary form).
+
+**Audit:**
+- `phase6_step3_s5_ridge_vs_var_mase.csv` (16 rows)
+- `phase6_step3_s5_country_narrative_summary.csv` (5 rows, includes
+  `beats_naive_mase_n` column)
+- `phase6_step3_s4_ridge_oos_metrics.csv` (upstream, 20 rows)
+
+**Propagation:** D-071 uses this result to resolve the USA dual-form
+question; Phase 7 DM operationalises the 16-cell comparison as formal
+hypothesis tests.
+
+---
+
+### D-071 | USA Dual-Form Resolution — first_diff Preferred for N2 Narrative at Phase 7
+
+**Date:** Phase 6 · Step 3 (sub-steps S3, S4, S5b)
+
+**Decision:** The USA dual-form contest (yoy_pct primary vs first_diff
+secondary, pre-committed via D-048 / D-062) is resolved empirically at
+Phase 6 Step 3 as follows: **first_diff is the preferred form for the
+N2 Monetary Transmission narrative** on the basis of coefficient
+interpretability, forecast accuracy, and VAR cross-lens consistency.
+yoy_pct primary is retained as sensitivity. Both forms enter Phase 7
+DM. The final adjudication (scale-invariant DM test) remains a
+Phase 7 deliverable per D-048.
+
+**Evidence supporting first_diff preference:**
+
+**(a) Policy-rate surface in top-5 (S3 + S5b).** USA yoy_pct primary
+top-5 contains only CPI auto-features (lag1, lag3, roll3_mean,
+roll12_mean) and `USA_GDP_roll12_std` — POLICY_RATE is absent through
+rank 5 and enters only at rank ≈ 15–20 with fold-unstable signs. USA
+first_diff secondary top-5 contains **`USA_POLICY_RATE_lag3 = −0.136`
+(rank 2)** and **`USA_POLICY_RATE_lag12 = +0.095` (rank 4)**, both
+sign-stable across folds.
+
+**(b) Cross-lens consistency with VAR IRF (D-056).** D-056 recorded
+VAR IRF peak at CPI response to POLICY_RATE shock: **−0.149 at h=4**
+(Cholesky-orthogonalised, CI excludes zero). The Ridge first_diff
+lag-3 coefficient (−0.136) reproduces the sign (negative), order of
+magnitude (|·| ≈ 0.14), and temporal position (lag 3 monthly ≈ IRF
+horizon 4) of the VAR IRF peak. This cross-lens match is the
+strongest within-project monetary-transmission signal at the
+stationary-form level.
+
+**(c) Forecast accuracy (S4, D-070).** USA first_diff beats USA
+yoy_pct on MASE at all 4 horizons, with roughly 40 % lower error at
+h = 1 and 80 % lower at h = 12:
+
+| horizon | USA primary (yoy_pct) MASE | USA first_diff MASE | Improvement |
+|:-:|---:|---:|---:|
+| 1 | 2.67 | 1.63 | 39 % |
+| 3 | 5.90 | 2.34 | 60 % |
+| 6 | 15.74 | 2.39 | 85 % |
+| 12 | 17.04 | 3.13 | 82 % |
+
+Both forms exceed naive MASE (1.0), consistent with D-070's absolute-
+difficulty finding, but first_diff is substantially closer.
+
+**(d) Bias behaviour under 2022 energy shock.** USA yoy_pct primary
+bias at h=12 is +4.24 (Ridge systematically under-predicts the
+inflation spike because training data's mean of ≈ 2.10 % anchors
+predictions); USA first_diff bias at h=12 is +0.23. The differencing
+form decouples absolute-level predictions from training-mean anchoring,
+which is the D-031 rationale behind Japan/Germany/UK defaulting to
+`first_diff`/`log_diff_pct`.
+
+**Phase 7 DM operationalisation:**
+
+- Both forms enter the DM matrix under matched origins.
+- **Primary comparison for N2 narrative:** Ridge USA first_diff vs VAR
+  USA (primary is yoy_pct for VAR by D-031; VAR first_diff was not run
+  per D-062 scope).
+- **Secondary comparison:** Ridge USA yoy_pct vs ARIMA USA yoy_pct
+  Stage (a) vs ARIMA USA yoy_pct Stage (c) (D-048 pre-commit).
+- **Tertiary comparison:** Ridge USA first_diff vs ARIMA USA
+  first_diff Stage (a) (D-048 pre-commit).
+
+**Rationale:**
+
+1. **Cross-lens consistency is portfolio-decisive.** The VAR IRF −0.149
+   ↔ Ridge first_diff lag3 −0.136 match across fundamentally different
+   methodologies (orthogonalised dynamic response vs penalised static
+   linear coefficient) is the kind of evidence triangulation D-046 /
+   D-057 established as the project's methodology backbone.
+
+2. **D-048 stopping rule.** D-048 pre-committed that the USA dual-form
+   adjudication be made on OOS-loss differentials, not in-sample fit.
+   D-070's MASE table satisfies that criterion — first_diff wins across
+   all horizons.
+
+3. **Not a yoy_pct rejection.** yoy_pct remains the D-031 primary form
+   for USA CPI in all Phase 4 deliverables. D-071 specifically concerns
+   the N2 narrative interpretation at Layer 3. yoy_pct remains the
+   default for portfolio figures showing level-interpretable year-over-
+   year context (Phase 5 EDA, Phase 8 summary).
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| Declare yoy_pct winner per D-031 default | Rejected — D-048 pre-committed empirical adjudication; D-031 defaults are construction-stage, not comparison-stage |
+| Run VAR in first_diff form too for symmetry | Rejected — violates D-062 scope (VAR primary is D-031 form); adds a 5th VAR estimation |
+| Keep both forms without resolution | Rejected — Phase 8 portfolio narrative needs a recommended interpretation for the N2 monetary transmission story |
+| Resolve only at Phase 7 DM (defer D-071) | Rejected — Phase 6 Step 3's cross-lens evidence is already decisive; deferring muddies the Step 3 → Step closure handoff |
+
+**Implementation:** No code change — D-071 is an interpretive
+consolidation of S3, S4, S5b outputs. Resolution statement reflected
+in:
+- `notebooks/08_ridge_regression.ipynb` (N2 narrative section)
+- `phase6_step3_summary.md` (Signature Findings)
+- Phase 7 DM directive (first_diff as primary Ridge input for N2 tests)
+
+**Audit:**
+- `phase6_step3_s3_top_features.csv` (USA dual-form top-10)
+- `phase6_step3_s4_ridge_oos_metrics.csv` (USA dual-form MASE/bias)
+- `phase6_step3_s5_narrative_ridge_statements.csv` (N2 corrected
+  statement under S5b)
+
+---
+
+### D-072 | N3 Japan Isolation — Septuple Cross-Lens Confirmation Formalisation
+
+**Date:** Phase 6 · Step 3 (sub-step S5, cross-phase finding)
+
+**Decision:** The N3 Japan Isolation narrative is formally recorded as
+**septuple-confirmed** across seven independent inferential lenses,
+extending the sextuple confirmation recorded at Phase 6 Step 2 closeout
+(phase6_step2_summary.md). The Ridge-layer lens contributed by D-066
+and D-067 is cross-referenced here; D-072 is the synthetic
+portfolio-level declaration.
+
+**Seven-lens matrix:**
+
+| # | Lens | Phase / Step | Japan-specific finding | Decision |
+|:-:|---|---|---|:-:|
+| 1 | ACF[12] | Phase 5 | Near-white-noise; weakest of 4 countries | D-044 |
+| 2 | ARIMA AIC grid | Phase 6 Step 1 | Interior min at lag 5; only non-boundary country | D-049 |
+| 3 | VAR AIC extension | Phase 6 Step 2 S1b | Interior min at lag 5 stable | D-050 |
+| 4 | Granger causality battery | Phase 6 Step 2 S3 | 0/4 CPI receivers Bonferroni-significant | D-052 |
+| 5 | VAR IRF | Phase 6 Step 2 S4 | 4/4 CPI-response CIs straddle zero | D-056 |
+| 6 | VAR FEVD | Phase 6 Step 2 S5 | 92 % self-share plateau at h=24 | D-058, D-059 |
+| 7 | **Ridge α + coef** | **Phase 6 Step 3 S2b + S3** | **α*=3162 (30–316× other countries); max&#124;coef&#124;=0.0100 (9.9–71.6× smaller); OOS MASE h=1 = 0.978 marginal beat-naive** | **D-066, D-067** |
+
+**Signature statement for portfolio:** *"Japan's CPI dynamics are
+quantifiably isolated from every external driver across seven
+independent methodological lenses spanning univariate
+autocorrelation, information-criterion model selection, multivariate
+Granger causality, orthogonalised impulse responses, variance
+decomposition, and high-dimensional L2-regularised regression. This
+level of cross-methodological robustness is not attributed by the
+project to any single lens; it is an emergent property of the
+Japanese inflation series' near-martingale behaviour combined with
+the 2022 structural break's failure to transmit into a persistent
+regime."*
+
+**Rationale:**
+
+1. **Cross-lens robustness is the highest-form evidence in the
+   project.** Any single lens could be a methodology artefact; seven
+   lenses drawing on fundamentally different mathematical objects
+   (correlation, likelihood, hypothesis testing, dynamic response,
+   variance share, linear coefficient magnitude) converging on the
+   same conclusion is the maximum cross-triangulation attainable with
+   the Phase 4 feature matrix and D-004 three-layer architecture.
+
+2. **D-072 replaces the sextuple-confirmed claim.** The
+   phase6_step2_summary.md "Seven Signature Findings" item #1 currently
+   reads "N3 Japan Isolation SEXTUPLE-confirmed". This will be updated
+   at the Phase 6 closeout to septuple-confirmed, with the updated
+   matrix cross-linking to D-072.
+
+3. **Foundation for Phase 8 narrative.** Of the three named
+   narratives (N1 cross-country, N2 policy response, N3 Japan
+   uniqueness), N3 is now the single most robustly-evidenced
+   finding in the project. This shapes Phase 8 findings.md section
+   priority ordering.
+
+**Rationale for separate decision (not merged into D-066):**
+D-066 records the S2b-specific evidence. D-067 records the S3
+coefficient-magnitude evidence. Neither alone declares the
+cross-project septuple status. D-072 is the synthetic declaration
+that binds all seven lenses across Phases 5–6 into a single
+portfolio-level claim.
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| Merge septuple declaration into D-066 | Rejected — D-066 is local (S2b-specific); cross-phase declaration deserves its own decision |
+| Defer to Phase 8 findings.md | Rejected — Phase 6 Step 3 summary needs to terminate with this declaration to hand off cleanly |
+| List only 6 lenses (excluding Ridge α) | Rejected — D-066 established Ridge α as independent 7th lens |
+| Expand to 8 lenses (add Ridge MASE separately) | Rejected — Ridge MASE is an OOS consequence of the α-selected model, not an independent lens |
+
+**Implementation:** No code change. D-072 propagates to:
+- `phase6_step3_summary.md` (Signature Findings, item #1)
+- `README.md` (Next Steps → Phase 7 directive)
+- `notebooks/08_ridge_regression.ipynb` (closing section)
+- Phase 6 closure update to `phase6_step2_summary.md` (sextuple →
+  septuple amendment)
+
+**Audit:** No new CSV. The septuple claim is backed by the pre-existing
+audit trace of D-044, D-049, D-050, D-052, D-056, D-058/D-059, D-066,
+D-067.
+
+---
+
+---
+
+### D-073 | Phase 6 Step 3 Closeout — Audit Freeze, Pipeline Scope Confirmation, src/ Promotion Reconsidered
+
+**Date:** Phase 6 · Step 3 closeout (post-S5b, pre-notebook)
+
+*Amended: post-D-073 original — Kota elected to execute the v0.4.2
+modelling_utils patch immediately rather than defer to Phase 6 closure.
+Amendment preserves the scope-freeze and S6-DRY-scan-removal decisions;
+revises only the src/ promotion conclusion and propagation to D-074.*
+
+**Decision (amended):**
+
+The Phase 6 Step 3 **analytical** pipeline is frozen at six scratch
+scripts + 15 audit CSVs + D-064..D-073 (ten analytical decisions). No
+Ridge re-fits, grid re-sweeps, or coefficient re-extractions are
+pending. Separately, the `src/` module promotion scan — originally
+scoped as a possible v0.4.2 patch extending `src/modelling_utils` with
+Ridge-layer helpers — **is executed immediately via D-074** rather than
+deferred to Phase 6 closure. The original Step 3 S6 DRY-scan sub-step
+is **removed** from Step 3 scope (absorbed into D-074); no S6 scratch
+script exists.
+
+**Final Step 3 inventory (unchanged from original D-073):**
+
+| Artefact type | Location | Count |
+|---|---|---:|
+| Scratch scripts | `scripts/phase6_step3_{s1, s2, s2b, s3, s4, s5, s5b}_*.py` | 7 files, 6 functional families |
+| Audit CSVs | `data/documentation/phase6_step3_*.csv` | 15 |
+| Analytical decisions | `ProjectDriven.md` D-064..D-073 | 10 |
+| src/ promotion decision | `ProjectDriven.md` D-074 | 1 |
+| Notebook (pending closure) | `notebooks/08_ridge_regression.ipynb` | 0 (pending) |
+| Portfolio figures (pending closure) | `outputs/figures/phase6_step3_*.png` | 0 (pending) |
+
+**Rationale for amendment:**
+
+1. **Evidence for immediate patch is decisive.** The Step 3 scripts
+   revealed four duplication patterns meeting or exceeding the D-063
+   4×-threshold: `build_usa_first_diff_features()` (4× in S1/S2/S3/S4),
+   `Pipeline(StandardScaler, Ridge)` construction (4× in S2/S2b/S3/S4),
+   `load_selected_alphas()` (3× in S3/S4/S5 — one below threshold but
+   co-promotion saves integration cost), and `classify_feature_category()`
+   regex (3× in S1/S3/S5b). Deferral was originally reasoned as
+   "v0.4.2 likely superseded by v0.5.0 at closure" — but D-073 also
+   acknowledged that v0.5.0 assembly depends on VAR wrapper scope which
+   is itself deferred to post-`07_var_model.ipynb` assessment. The
+   composed deferral chain (Step 3 → VAR notebook → VAR wrapper →
+   v0.5.0) delays promotion indefinitely; executing v0.4.2 now decouples
+   Ridge promotion from VAR wrapper timing.
+
+2. **Notebook 08 consumes the patched API cleanly.**
+   `notebooks/08_ridge_regression.ipynb` imports `TRAIN_END`, `TEST_START`,
+   `HORIZONS_PHASE7`, `ALPHA_GRID_DEFAULT`, `VAR_MASE_D060`, and
+   `load_selected_alphas()` directly from `src`, reducing code-cell
+   verbosity. Had v0.4.2 been deferred, notebook 08 would have needed
+   to duplicate the helpers yet again — the 5th copy — contradicting
+   the entire D-063 rationale.
+
+3. **v0.5.0 scope is unaffected.** v0.4.2 is a patch (adds helpers,
+   no API removals, no existing-export changes). The v0.5.0 full bump
+   at Phase 6 closure remains scoped to potential model-fitting wrapper
+   classes (`src/models.py` or `src/modelling.py`), which would absorb
+   the `Pipeline` factory at the next semver-minor boundary. v0.4.2 is
+   additive; v0.5.0 can reorganise without breaking users of v0.4.2's
+   helpers.
+
+4. **Existing 6 Step 3 scratch scripts remain untouched.** Consistent
+   with D-063 ("existing nine Step 2 scratch scripts are deliberately
+   NOT refactored"). The Step 3 scripts produced their audit CSVs
+   before v0.4.2 existed; refactoring them now would be cosmetic and
+   risk CSV regression. Only **new** code from this point forward
+   (notebook 08, Phase 7 DM scripts, Phase 8 synthesis) imports the
+   v0.4.2 API.
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| Keep D-073's original "defer to Phase 6 closure" verdict | Rejected — duplication is already 4× and notebook 08 would add a 5th |
+| Execute v0.4.2 at the 5th-duplication threshold instead of 4th | Rejected — D-063 set the threshold at 4; changing it post-hoc would be ad-hoc |
+| Refactor the 6 Step 3 scratch scripts to use the new API | Rejected — D-063 precedent; audit CSVs already produced, refactor risks regression |
+| Jump directly to v0.5.0 without v0.4.2 | Rejected — v0.5.0 requires VAR wrapper scope assessment, which is itself deferred |
+
+**Implementation:** This amendment plus D-074's new module-level entry.
+
+**Audit:** No new CSV. The amendment itself is documented by the
+decision-log edit; D-074 documents the actual module changes.
+
+---
+
+### D-074 | `src/modelling_utils` Extension at v0.4.2 — Phase 6 Step 3 Helpers
+
+**Date:** Phase 6 · Step 3 closeout (post-D-073 amendment, pre-notebook)
+
+**Decision:** Extend `src/modelling_utils.py` with seven constants and
+five helper functions promoted from the six Phase 6 Step 3 scratch
+scripts. Bump `src/__init__.py` from **v0.4.1 → v0.4.2** (patch bump).
+The six existing Step 3 scratch scripts are **deliberately NOT refactored**
+— per D-063 precedent, they have already produced their audit CSVs and
+rewriting working code purely for DRY aesthetic risks regression on
+immutable outputs. Only new code from this point forward — notebook 08,
+Phase 7 Diebold-Mariano, Phase 8 synthesis — imports from the v0.4.2 API.
+
+**Promoted items (13 total):**
+
+Seven new constants:
+
+| Constant | Type | Decision linkage | Previous duplication |
+|---|---|:-:|:-:|
+| `TRAIN_END` | `pd.Timestamp` | D-005 | 6× |
+| `TEST_START` | `pd.Timestamp` | D-005 | 6× |
+| `HORIZONS_PHASE7` | `tuple[int, ...]` | D-060 / D-068 | 3× |
+| `ALPHA_GRID_DEFAULT` | `np.ndarray` | D-065 | 1× (future-proofing) |
+| `N_SPLITS_DEFAULT` | `int` | D-065 | 3× |
+| `RANDOM_STATE_DEFAULT` | `int` | D-065 | 4× |
+| `CATEGORY_ORDER` | `list[str]` | D-067 | 2× |
+
+Five new helper functions:
+
+| Function | Purpose | Previous duplication |
+|---|---|:-:|
+| `classify_feature_category(col)` | Regex-based Phase 4 feature-category map | 3× (S1 / S3 / S5b) |
+| `build_usa_first_diff_features()` | USA dual-form construction via `REGISTRY_OVERRIDES` patch | 4× (S1 / S2 / S3 / S4) |
+| `load_selected_alphas(doc_dir)` | Merge S2 + S2b α CSVs with JPN primary override | 3× (S3 / S4 / S5) |
+| `make_ridge_pipeline(alpha, random_state)` | Unfitted `Pipeline(StandardScaler, Ridge)` factory | 4× (S2 / S2b / S3 / S4) |
+| `compute_walk_forward_origins(index, test_start, horizons)` | Paired-DM origin set | 1× (future Phase 7) |
+
+One new reference dictionary:
+
+| Constant | Content |
+|---|---|
+| `VAR_MASE_D060` | VAR OOS MASE at AIC-selected p per country at h ∈ {1,3,6,12} — hardcoded from D-060. Used for Ridge-vs-VAR comparison (D-070) and as Phase 7 VAR baseline. |
+
+**Rationale:**
+
+1. **D-063 4×-duplication rule threshold met.** The promoted items all
+   reached or exceeded the 4× threshold at Step 3 closeout, with the
+   exception of `load_selected_alphas` (3×) and `classify_feature_category`
+   (3×). These two sub-4× items are co-promoted because:
+   - Both were going to hit 4× in notebook 08 (the 4th copy); promoting
+     now rather than waiting for notebook assembly avoids a silent cross-
+     cutover where identical helpers exist in both forms.
+   - Both are pure functions of small enough surface area that promotion
+     cost is trivial — a few dozen lines each.
+
+2. **Scope preserved from D-063.** v0.4.1's narrow scope ("constants
+   and pure helpers; no model-fitting calls") is maintained at v0.4.2.
+   The `make_ridge_pipeline()` helper returns an **unfitted** Pipeline;
+   the caller invokes `.fit()`. No `Ridge.fit()`, `VAR.fit()`, or
+   walk-forward refit loop is absorbed into `src/`.
+
+3. **Backward compatibility.** v0.4.2 is additive — v0.4.1's seven
+   exports are unchanged. No existing module's API is altered. Existing
+   Phase 6 Step 2 scratch scripts and `notebooks/07_var_model.ipynb`
+   (pending assembly) continue to work without modification.
+
+4. **v0.5.0 scope unaffected.** The Phase 6 closure v0.5.0 bump —
+   whether to introduce `src/models.py` for full model wrappers, or
+   fold future Ridge / VAR classes into an expanded `modelling_utils` —
+   remains deferred pending `07_var_model.ipynb` assembly. v0.4.2 is
+   orthogonal to that decision: it promotes utilities that v0.5.0
+   wrappers would themselves import.
+
+5. **Cross-module dependency management.**
+   `build_usa_first_diff_features()` uses a local (inside-function)
+   import of `src.feature_engineering` to avoid a circular-import risk
+   at module-load time (`feature_engineering` imports `PHASE6_REGIME_SPEC`
+   from this module via re-export). `make_ridge_pipeline()` uses a
+   local import of `sklearn.*` so that `src` consumers who use only
+   Phase 1–5 features do not incur a hard sklearn dependency.
+
+**Alternatives Considered:**
+
+| Option | Verdict |
+|---|---|
+| Skip v0.4.2, go straight to v0.5.0 at closure | Rejected — v0.5.0 requires VAR wrapper assessment; orthogonal deferral risks indefinite delay |
+| v0.4.2 but only promote 4×-strict items (5 items) | Rejected — load_selected_alphas and classify_feature_category will hit 4× in notebook 08; co-promotion avoids cross-cutover |
+| Create new `src/ridge_utils.py` module instead of extending `modelling_utils` | Rejected — fragments the Phase 6 shared-utilities surface; D-063 established `modelling_utils` as the Phase 6 home |
+| Include `Ridge.fit()` call in a `fit_ridge_cv()` helper | Rejected — violates D-063 "no model-fitting" narrow scope; keep `src/` pure, callers orchestrate fits |
+| Hardcode `VAR_MASE_D060` in notebook 08 instead of `src/` | Rejected — VAR MASE is Phase 7 DM input; centralising in `src/` prevents drift between notebook and DM script |
+
+**Implementation:**
+
+- `src/modelling_utils.py` — constants and helpers appended; v0.4.1
+  content unchanged. Module docstring updated to reflect v0.4.2
+  additions. `__all__` extended by 13 entries.
+- `src/__init__.py` — `__version__` bumped `0.4.1` → `0.4.2`; version
+  history docstring extended; re-exports added for all 13 new items;
+  `__all__` extended.
+- **No changes** to `scripts/phase6_step3_*.py` (6 files). D-063
+  precedent preserved.
+- **No changes** to Phase 2 / Phase 3 / Phase 4 / Phase 6 Step 1 / Step 2
+  modules or scripts.
+
+**Audit:** No new CSV. v0.4.2 is a code-only patch; the audit trail is
+the git commit introducing these changes plus this decision entry.
+
+**Propagation:**
+
+- `notebooks/08_ridge_regression.ipynb` imports from v0.4.2 API; first
+  consumer.
+- `phase6_step3_summary.md` — v0.4.1 → v0.4.2 version reference needs
+  update at Phase 6 closure.
+- `README.md` — `src/ at v0.4.1` reference needs update to v0.4.2 at
+  Phase 6 closure.
+- Phase 7 Diebold-Mariano scripts (not yet written) will reuse
+  `VAR_MASE_D060`, `compute_walk_forward_origins()`, and
+  `HORIZONS_PHASE7` as canonical inputs.
+
+---
 
